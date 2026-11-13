@@ -1,0 +1,50 @@
+%test
+
+  print -P '%%|%)|%(?.ok.bad)|%3(?.a.b)'
+0:Prompt literals and conditionals
+>%|)|ok|b
+
+  false; print -P '%?'
+0:%? shows the last status
+>1
+
+  cd /; print -P '%~ %/ %c'
+0:Directory escapes at /
+>/ / /
+
+  cd; print -P '%~'
+0:Home is ~
+>~
+
+  mkdir -p x/y; cd x/y; print -P '%~|%1~|%2/|%c'
+0:Directory escapes
+>~/x/y|y|x/y|y
+
+  mkdir -p proj/src; hash -d pj=$HOME/proj; cd proj/src; print -P '%~'
+0:Named directory in %~
+>~pj/src
+
+  print -P '%10<..<abcdefghijklmnop%<<|%5>..>abcdefgh%>>'
+0:Truncation
+>..ijklmnop|abc..
+
+  print -P '%F{red}r%f%K{blue}k%k%F{123}x' | cat -v
+0:Colours
+>^[[31mr^[[39m^[[44mk^[[49m^[[38;5;123mx
+
+  print -P '%(!.root.user)' | grep -cE '^(root|user)$'
+0:%(!...)
+>1
+
+  print -P '%D{%Y}' | grep -c '^20[0-9][0-9]$'
+0:%D{strftime}
+>1
+
+  v=X; print -P '$v'; setopt promptsubst; print -P '$v'
+0:PROMPT_SUBST
+>$v
+>X
+
+  print -P '%{%}a%{b%}'
+0:%{ %}
+>ab

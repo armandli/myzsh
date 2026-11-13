@@ -1,0 +1,20 @@
+%test
+
+  setopt xtrace; print hi
+0:XTRACE
+>hi
+?+zsh:1> print hi
+
+  set -x; x=1; set +x
+0:XTRACE of assignment
+?+zsh:1> x=1 
+?+zsh:1> set +x
+
+  PS4='> '; setopt xtrace; print a
+0:PS4
+>a
+?> print a
+
+  setopt verbose; print v
+0:VERBOSE
+>v

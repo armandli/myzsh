@@ -1,0 +1,50 @@
+%prep
+  mkdir -p a/b c
+%test
+
+  cd a; print ${PWD:t}
+0:cd into a directory
+>a
+
+  cd a/b; cd ../..; [[ $PWD == $HOME ]] && print home
+0:cd with ..
+>home
+
+  cd a; cd; [[ $PWD == $HOME ]] && print home
+0:cd with no argument goes home
+>home
+
+  cd a; cd - >/dev/null; [[ $PWD == $HOME ]] && print back
+0:cd -
+>back
+
+  cd nonexistent
+1:cd to missing directory
+?zsh:cd:2: no such file or directory: nonexistent
+
+  touch file; cd file
+1:cd to a file
+?zsh:cd:2: not a directory: file
+
+  cdpath=($HOME/a); cd b >/dev/null; print ${PWD:h:t}/${PWD:t}
+0:CDPATH search
+>a/b
+
+  pushd a >/dev/null; pushd ../c >/dev/null; print ${#dirstack}; popd >/dev/null; print ${PWD:t}
+0:pushd and popd
+>2
+>a
+
+  setopt autopushd; cd a; cd ../c; print ${#dirstack}
+0:AUTO_PUSHD
+>2
+
+  cd a; print ~+ | sed 's|.*/||'; print ~- | grep -c "^$HOME\$"
+0:~+ and ~-
+>a
+>1
+
+  mkdir real; ln -s real link; cd link; print ${PWD:t}; cd -P .; print ${PWD:t}
+0:Logical and physical paths
+>link
+>real

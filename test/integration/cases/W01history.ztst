@@ -1,0 +1,14 @@
+%test
+
+  print -s one; print -s two; fc -ln -2
+0:fc -l lists history
+>one
+>two
+
+  print -s one; history -n | tail -1
+0:history builtin
+>one
+
+  print 'from file' > h; HISTFILE=$PWD/h; fc -R; fc -ln -1
+0:fc -R reads HISTFILE
+>from file

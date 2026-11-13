@@ -1,0 +1,29 @@
+%test
+
+  print {a,b}{1,2} x{,y}z
+0:Brace lists
+>a1 a2 b1 b2 xz xyz
+
+  print {1..5} {3..1} {05..10..2} {a..e}
+0:Brace ranges
+>1 2 3 4 5 3 2 1 05 07 09 a b c d e
+
+  print {a,{b,c}d}
+0:Nested braces
+>a bd cd
+
+  print {abc} '{a,b}'
+0:Not expanded
+>{abc} {a,b}
+
+  setopt braceccl; print {abc}
+0:BRACE_CCL
+>a b c
+
+  setopt ignorebraces; print {a,b}
+0:IGNORE_BRACES
+>{a,b}
+
+  x=1; print {$x,2}
+0:Parameters before braces
+>1 2

@@ -1,0 +1,50 @@
+%test
+
+  trap 'print exit trap' EXIT; print main
+0:EXIT trap
+>main
+>exit trap
+
+  f() { trap 'print fn exit' EXIT; print in f }; f; print after
+0:EXIT trap in a function runs on return
+>in f
+>fn exit
+>after
+
+  trap 'print got USR1' USR1; kill -USR1 $$; print after
+0:Signal trap
+>got USR1
+>after
+
+  TRAPUSR1() { print fn trap }; kill -USR1 $$
+0:TRAPxxx function
+>fn trap
+
+  trap 'print zerr' ZERR; false; true
+0:ZERR trap
+>zerr
+
+  trap 'print debug' DEBUG; true
+0d:DEBUG trap
+
+  trap '' USR1; kill -USR1 $$; print survived
+0:Ignored signal
+>survived
+
+  trap 'print x' INT; trap
+0:Listing traps
+>trap -- 'print x' INT
+
+  trap 'print x' INT; trap - INT; trap
+0:Resetting a trap
+
+  trap 'print bad' NOSUCHSIG
+1:Unknown signal
+?zsh:trap:1: undefined signal: NOSUCHSIG
+
+  f() { trap 'print inner' USR1 }; f; trap
+0:Traps set in a function persist
+>trap -- 'print inner' USR1
+
+  f() { setopt localtraps; trap 'print inner' USR1 }; f; trap
+0:LOCAL_TRAPS restores traps on return

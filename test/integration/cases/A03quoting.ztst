@@ -1,0 +1,39 @@
+%test
+
+  print 'single $x' "double ${:-y}" \$z
+0:Quote types
+>single $x double y $z
+
+  print $'a\tb' | od -c | sed -n 1p | tr -s ' ' | sed 's/ *$//'
+0:Dollar quotes
+>0000000 a \t b \n
+
+  print "a\"b" 'c'\''d'
+0:Embedded quotes
+>a"b c'd
+
+  x='a b'; print -l $x "$x"
+0:No word splitting of unquoted parameters
+>a b
+>a b
+
+  print -l "" ''
+0:Empty quoted arguments are kept
+>
+>
+
+  e=; print -l $e x
+0:Empty unquoted expansion is removed
+>x
+
+  print -r "\$ \` \\ \a"
+0:Backslash inside double quotes
+>$ ` \ \a
+
+  setopt rcquotes; eval "print 'it''s'"
+0:RC_QUOTES
+>it's
+
+  print '*' "*" \*
+0:Quoted glob characters
+>* * *

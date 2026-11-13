@@ -1,0 +1,29 @@
+%test
+
+  s="hello world"; print $s[1] $s[-1] $s[2,4] ${s[(w)2]}
+0:Scalar subscripts
+>h d ell world
+
+  s="hello world"; print ${s[(i)o]} ${s[(I)o]}
+0:Scalar search
+>5 8
+
+  s=hello; s[1]=J; print $s
+0:Scalar element assignment
+>Jello
+
+  typeset -A h; h=(k1 v1 'k*' star); print ${h[(i)k1]} ${h[(k)kzz]} ${h[(r)s*]}
+0:Assoc subscript flags
+>k1 star star
+
+  a=(one two three); print ${a[(n:2:r)t*]}
+0:n:N: flag
+>three
+
+  s='a,b,c'; print ${s[(ws:,:)2]}
+0:Word subscript with separator
+>b
+
+  a=(1 2 3); i=2; print $a[i] $a[i+1] $a[$#a]
+0:Arithmetic in subscripts
+>2 3 3

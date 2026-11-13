@@ -1,0 +1,45 @@
+%test
+
+  sleep 2 & jobs; kill %1
+0:jobs
+>[1]  + running    sleep 2
+
+  sleep 2 & sleep 2 & jobs; kill %1 %2
+0:Current and previous job
+>[1]  - running    sleep 2
+>[2]  + running    sleep 2
+
+  sleep 2 & jobs -l > out; kill %1; sed 's/[0-9][0-9]* running/PID running/' out
+0:jobs -l shows pids
+>[1]  + PID running    sleep 2
+
+  (exit 3) & wait $!; print $?
+0:wait returns job status
+>3
+
+  sleep 5 & kill %1; wait %1; print $?
+0:Killed job status
+>143
+
+  wait 99999
+127:wait for unknown pid
+?zsh:wait:1: pid 99999 is not a child of this shell
+
+  sleep 2 & disown; jobs; kill $!
+0:disown removes the job
+
+  fg
+1:fg without job control
+?zsh:fg:1: no job control in this shell.
+
+  kill -l INT; kill -l 15
+0:kill -l
+>2
+>TERM
+
+  kill -s TERM $$
+143:kill sends signals
+
+  kill %9
+1:No such job
+?zsh:kill:1: %9: no such job

@@ -1,0 +1,66 @@
+%test
+
+  nosuchcommand_xyz
+127:Command not found
+?zsh:1: command not found: nosuchcommand_xyz
+
+  print '#!/bin/sh' > s; print 'echo from script' >> s; chmod +x s; ./s
+0:Run an executable script
+>from script
+
+  print 'echo no shebang' > ns; chmod +x ns; ./ns
+0:Script without #! runs with the shell
+>no shebang
+
+  print 'echo x' > noexec; ./noexec
+126:Permission denied
+?zsh:1: permission denied: ./noexec
+
+  /bin/sh -c 'exit 7'
+7:Exit status of external command
+
+  (exit 3); print $?
+0:Subshell exit status
+>3
+
+  false; $nonexistent_variable
+0:Empty command resets status
+
+  print $$ | grep -q '^[0-9]*$' && print pid
+0:$$ is numeric
+>pid
+
+  (print $ZSH_SUBSHELL)
+0:ZSH_SUBSHELL in subshell
+>1
+
+  sleep 0 & [[ $! == <-> ]] && print bg
+0:$! after background job
+>bg
+
+  V=temp sh -c 'echo $V'; print "[$V]"
+0:Temporary environment assignment
+>temp
+>[]
+
+  print one; exit 4; print two
+4:exit stops the script
+>one
+
+  sh -c 'kill -TERM $$'
+143:Killed by signal gives 128+N
+
+  true | false | true; print $pipestatus
+0:pipestatus
+>0 1 0
+
+  setopt pipefail; false | true
+1:PIPE_FAIL
+
+  command -p ls -d .
+0:command -p uses the default PATH
+>.
+
+  exec print replaced; print not reached
+0:exec builtin
+>replaced

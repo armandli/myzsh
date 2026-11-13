@@ -1,0 +1,21 @@
+%test
+
+  cat <(print from-proc)
+0:<( ) process substitution
+>from-proc
+
+  print data > >(cat); wait
+0:>( ) process substitution
+>data
+
+  cat =(print temp-file)
+0:=( ) temporary file
+>temp-file
+
+  diff <(print a) <(print a) && print same
+0:Two process substitutions
+>same
+
+  [[ $(print <(true)) == /dev/fd/* ]] && print fdpath
+0:Process substitution yields /dev/fd path
+>fdpath

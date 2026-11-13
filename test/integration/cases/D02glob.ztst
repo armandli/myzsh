@@ -1,0 +1,111 @@
+%prep
+  touch a.c b.c c.h .hidden file1 file2 file10
+  mkdir -p dir1/sub dir2
+  touch dir1/x.c dir1/sub/y.c
+  ln -s a.c link.c
+  chmod +x b.c
+%test
+
+  print *.c
+0:Star
+>a.c b.c link.c
+
+  print ?.c [ab].c [!a].c
+0:Question and brackets
+>a.c b.c a.c b.c b.c
+
+  print [[:alpha:]].h
+0:Character class
+>c.h
+
+  print .h*
+0:Explicit dot matches hidden files
+>.hidden
+
+  setopt globdots; print *(.)
+0:GLOB_DOTS
+>.hidden a.c b.c c.h file1 file10 file2
+
+  print **/*.c
+0:Recursive glob
+>a.c b.c dir1/sub/y.c dir1/x.c link.c
+
+  print file*; print file*(n)
+0:Numeric sort qualifier
+>file1 file10 file2
+>file1 file2 file10
+
+  print *(/); print *(@); print *(*)
+0:Type qualifiers
+>dir1 dir2
+>link.c
+>b.c
+
+  print data > big; print *(.L+0)
+0:Size qualifier
+>big
+
+  print *.c(:r) *(/M)
+0:Modifier and mark qualifiers
+>a b link dir1/ dir2/
+
+  print file*(On[1,2])
+0:Sort and slice qualifiers
+>file2 file10
+
+  print *.zz(N) end
+0:NULL_GLOB qualifier
+>end
+
+  print *.zz
+1:No match is an error
+?zsh:6: no matches found: *.zz
+
+  unsetopt nomatch; print *.zz
+0:NO_NOMATCH keeps the pattern
+>*.zz
+
+  setopt nullglob; print *.zz end
+0:NULL_GLOB option
+>end
+
+  setopt cshnullglob; print *.zz *.h
+0:CSH_NULL_GLOB
+>c.h
+
+  setopt extendedglob; print ^*.c; print *~*.h; print file<1-5>; print (#i)A.C
+0:Extended glob
+>c.h dir1 dir2 file1 file10 file2
+>a.c b.c dir1 dir2 file1 file10 file2 link.c
+>file1 file2
+>a.c
+
+  print (a|b).c
+0:Alternation
+>a.c b.c
+
+  setopt kshglob; print @(a|c).* +(file)1
+0:KSH_GLOB
+>a.c c.h file1
+
+  setopt markdirs; print dir*
+0:MARK_DIRS
+>dir1/ dir2/
+
+  print *(e:'[[ $REPLY == *.h ]]':)
+0:Eval qualifier
+>c.h
+
+  setopt noglob; print *.c
+0:NO_GLOB
+>*.c
+
+  x='*.c'; print $x; print $~x; setopt globsubst; print $x
+0:GLOB_SUBST
+>*.c
+>a.c b.c link.c
+>a.c b.c link.c
+
+  print '*.c' "*".c \*.c
+0:Quoted glob characters
+>*.c *.c *.c

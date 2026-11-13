@@ -1,0 +1,89 @@
+%test
+
+  print out > file; cat file
+0:Output redirection
+>out
+
+  print a > f; print b >> f; cat f
+0:Append
+>a
+>b
+
+  print data > f; read line < f; print $line
+0:Input redirection
+>data
+
+  { print o; print e >&2 } > out 2>&1; cat out
+0:Duplicating stderr
+>o
+>e
+
+  { print o; print e >&2 } &> both; cat both
+0:&> redirects both
+>o
+>e
+
+  print x 2>/dev/null >&2 | cat
+0:MULTIOS: >&2 and the pipe both receive output
+>x
+
+  cat <<EOF
+  line $((1+1))
+  EOF
+0:Here document with expansion
+>line 2
+
+  cat <<'EOF'
+  line $((1+1))
+  EOF
+0:Quoted here document is literal
+>line $((1+1))
+
+  cat <<-EOF
+  	tab stripped
+  	EOF
+0:Here document with tab stripping
+>tab stripped
+
+  cat <<< "here string"
+0:Here string
+>here string
+
+  setopt noclobber; print a > f; print b > f
+1:NO_CLOBBER prevents overwriting
+?zsh:1: file exists: f
+
+  setopt noclobber; print a > f; print b >| f; cat f
+0:>| overrides NO_CLOBBER
+>b
+
+  print multi > a > b; cat a b
+0:MULTIOS writes to both files
+>multi
+>multi
+
+  print tee > out | cat; cat out
+0:MULTIOS with pipe
+>tee
+>tee
+
+  exec {fd}>fdfile; print -u $fd via-fd; exec {fd}>&-; cat fdfile
+0:{var} fd allocation
+>via-fd
+
+  cat < nonexistent
+1:Missing input file
+?zsh:1: no such file or directory: nonexistent
+
+  { print in-brace } > f; cat f
+0:Redirection of a compound command
+>in-brace
+
+  for i in 1 2; do print $i; done > f; cat f
+0:Redirection of a loop
+>1
+>2
+
+  print hi | read v; print $v
+0:Last pipeline stage runs in the current shell
+>hi

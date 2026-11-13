@@ -1,0 +1,64 @@
+%test
+
+  f() { print $# $1 $2 }; f a 'b c'
+0:Function arguments
+>2 a b c
+
+  f() { print $0 }; f
+0:$0 in a function
+>f
+
+  set -- outer; f() { print $1 }; f inner; print $1
+0:Positional parameters restored
+>inner
+>outer
+
+  f() { local x=1; g }; g() { print $x }; f
+0:Dynamic scope
+>1
+
+  f() { print first }; f() { print second }; f
+0:Redefinition
+>second
+
+  f g() { print shared }; g
+0:Multiple names
+>shared
+
+  f() { print $funcstack }; g() { f }; g
+0:funcstack
+>f g
+
+  f() { f }; FUNCNEST=5; f
+1:FUNCNEST
+?f: maximum nested function level reached; increase FUNCNEST?
+
+  f() { print hi }; functions f
+0:functions output
+>f () {
+>	print hi
+>}
+
+  f() { :; }; unfunction f; f
+127:unfunction
+?zsh:1: command not found: f
+
+  mkdir fns; print 'print autoloaded $1' > fns/afn; fpath=($PWD/fns); autoload afn; afn x
+0:Autoload zsh style
+>autoloaded x
+
+  mkdir fns; print 'kfn() { print ksh style }' > fns/kfn; fpath=($PWD/fns); autoload kfn; kfn
+0:Autoload ksh style
+>ksh style
+
+  autoload nosuchfn; nosuchfn
+1:Autoload failure
+?zsh:1: nosuchfn: function definition file not found
+
+  () { print $# } a b c
+0:Anonymous function arguments
+>3
+
+  f() { setopt localoptions extendedglob }; f; [[ -o extendedglob ]] || print restored
+0:LOCAL_OPTIONS
+>restored

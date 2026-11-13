@@ -1,0 +1,72 @@
+%test
+
+  x=1; print $x
+0:Scalar assignment
+>1
+
+  a=(1 2 3); print $#a $a[2]
+0:Array assignment
+>3 2
+
+  a=(1 2); a+=(3); s=ab; s+=cd; print $a $s
+0:Append assignments
+>1 2 3 abcd
+
+  integer i=5; i+=2; print $i
+0:Integer append is arithmetic
+>7
+
+  a=(a b c); a[2]=X; print $a
+0:Element assignment
+>a X c
+
+  a=(a b c d); a[2,3]=(x y z); print $a
+0:Slice assignment
+>a x y z d
+
+  a=(a); a[4]=d; print -l "$a[@]"
+0:Assigning past the end pads
+>a
+>
+>
+>d
+
+  typeset -A h; h=(k1 v1 k2 v2); print $h[k2]
+0:Associative array assignment
+>v2
+
+  typeset -A h; h[new]=val; print ${(k)h}
+0:Associative element assignment
+>new
+
+  typeset -A h=([a]=1 [b]=2); print ${(o)${(k)h}}
+0:Associative bracket syntax
+>a b
+
+  typeset -A h; h=(odd)
+1:Odd number of assoc elements
+?zsh:1: bad set of key/value pairs for associative array
+
+  x=~/sub; [[ $x == $HOME/sub ]] && print tilde
+0:Tilde expansion in assignment
+>tilde
+
+  x=/a:~/b; [[ $x == /a:$HOME/b ]] && print tilde-colon
+0:Tilde after colon in assignment
+>tilde-colon
+
+  touch g1 g2; x=g*; print $x
+0:No globbing in scalar assignment
+>g*
+
+  touch g1 g2; x=(g*); print $x
+0:Globbing in array assignment
+>g1 g2
+
+  readonly r=1; r=2
+1:Readonly assignment
+?zsh:1: read-only variable: r
+
+  a=1 b=2; print $a$b
+0:Multiple assignments
+>12

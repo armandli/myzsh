@@ -1,0 +1,39 @@
+%test
+
+  print $(print hi) `print there`
+0:Command substitution forms
+>hi there
+
+  x=$(printf 'a\n\n\n'); print "[$x]"
+0:Trailing newlines removed
+>[a]
+
+  print -l $(print a b)
+0:Unquoted result is split
+>a
+>b
+
+  print -l "$(print a b)"
+0:Quoted result is not split
+>a b
+
+  x=$(exit 3); print $?
+0:Status of command substitution
+>3
+
+  print $(print $(print nested))
+0:Nesting
+>nested
+
+  print "$(print 'a"b')"
+0:Quotes inside quoted substitution
+>a"b
+
+  print $(case x in (x) print paren;; esac)
+0:case inside $( )
+>paren
+
+  x=1; print $(x=2; print $x); print $x
+0:Runs in a subshell
+>2
+>1

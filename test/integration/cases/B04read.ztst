@@ -1,0 +1,61 @@
+%test
+
+<one two three
+  read a b; print "$a|$b"
+0:read splits fields, last name gets the rest
+>one|two three
+
+<line
+  read; print $REPLY
+0:read defaults to REPLY
+>line
+
+<x y z
+  read -A arr; print $#arr
+0:read -A
+>3
+
+<a\
+<b
+  read v; print -r -- $v
+0:Backslash-newline continues the line
+>ab
+
+<a\b
+  read -r v; print -r -- $v
+0:read -r keeps backslashes
+>a\b
+
+  read v < /dev/null
+1:read at EOF
+
+<abcd
+  read -k 2 -u 0 v; print $v
+0:read -k
+>ab
+
+<ab:cd
+  read -d : v; print $v
+0:read -d
+>ab
+
+<x:y:z
+  IFS=: read a b; print $a $b
+0:read with IFS
+>x y:z
+
+  print -n 'no newline' | { read v; print $? $v }
+0:read without trailing newline
+>1 no newline
+
+  read -t 0.1 v; print $?
+0:read timeout with no input
+>1
+
+  print one | read -E v
+0:read -E echoes
+>one
+
+  read 'v?prompt> ' <<< x; print $v
+0:read with prompt
+>x

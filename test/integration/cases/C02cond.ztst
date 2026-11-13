@@ -1,0 +1,64 @@
+%prep
+  touch file; mkdir dir; ln -s file link; print data > full; chmod +x full
+%test
+
+  [[ -f file && -d dir && -L link && -e file && ! -e nope ]] && print files
+0:File tests
+>files
+
+  [[ -s full && ! -s file && -x full && -r file && -w file ]] && print attrs
+0:Attribute tests
+>attrs
+
+  [[ file -ef link ]] && print same
+0:-ef
+>same
+
+  [[ abc == a* ]] && [[ abc = a?c ]] && [[ abc != b* ]] && print patterns
+0:Pattern matching
+>patterns
+
+  [[ abc == "a*" ]] || print quoted
+0:Quoted pattern is literal
+>quoted
+
+  p='a*'; [[ abc == $p ]] || print literal; [[ abc == $~p ]] && print glob
+0:GLOB_SUBST via $~
+>literal
+>glob
+
+  [[ abc =~ ^a(b)c$ ]] && print $MATCH $match[1]
+0:Regex match
+>abc b
+
+  setopt bashrematch; [[ abc =~ a(b)c ]] && print $BASH_REMATCH
+0:BASH_REMATCH
+>abc b
+
+  [[ 2 -lt 10 && 10 -eq 1+9 && b > a ]] && print compare
+0:Numeric and string comparison
+>compare
+
+  [[ -n x && -z '' && -v HOME && -o glob ]] && print misc
+0:String, variable and option tests
+>misc
+
+  [[ ( -z x || -n x ) && ! -z x ]] && print grouped
+0:Grouping
+>grouped
+
+  [ 1 -eq 1 -a 2 -gt 1 ] && test x = x && [ ! -z x ] && print test
+0:test and [
+>test
+
+  test; print $?
+0:test with no arguments
+>1
+
+  [ a = a
+2:[ requires ]
+?zsh:[:2: ']' expected
+
+  [[ a =~ '(' ]]
+1D:Bad regex
+F:The regex error text comes from regcomp(3) and differs by platform

@@ -1,0 +1,61 @@
+%test
+
+  for i in 1 2 3 4; do
+    (( i == 2 )) && continue
+    (( i == 4 )) && break
+    print $i
+  done
+0:break and continue
+>1
+>3
+
+  for i in 1 2; do for j in a b; do print $i$j; continue 2; done; done
+0:continue N
+>1a
+>2a
+
+  for i in 1 2; do for j in a b; do print $i$j; break 2; done; done
+0:break N
+>1a
+
+  f() { return 3; print no }; f; print $?
+0:return
+>3
+
+  f() { for i in 1 2; do return $i; done }; f; print $?
+0:return from inside a loop
+>1
+
+  while false; do :; done; print $?
+0:while with no iterations has status 0
+>0
+
+  if false; then :; fi; print $?
+0:if with no branch taken has status 0
+>0
+
+  { false } always { print TRY_BLOCK_ERROR=$TRY_BLOCK_ERROR }
+1:always sees no error for plain failure
+>TRY_BLOCK_ERROR=0
+
+  f() { { print in; return 3 } always { print always } }; f; print $?
+0:always runs after return
+>in
+>always
+>3
+
+  { print ${x:?boom} } always { print cleanup }; print after
+1:An error in a non-interactive shell exits before always
+?zsh:1: x: boom
+
+  setopt errexit; print a; false; print b
+1:ERR_EXIT
+>a
+
+  setopt errexit; false || true; if false; then :; fi; ! true; print ok
+0:ERR_EXIT ignores conditions
+>ok
+
+  f() { setopt localoptions errreturn; false; print not }; f; print after
+0:ERR_RETURN
+>after

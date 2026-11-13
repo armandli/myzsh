@@ -1,0 +1,67 @@
+%test
+
+  typeset x=1; typeset -p x
+0:typeset -p scalar
+>typeset x=1
+
+  typeset -a a=(1 'two 2'); typeset -p a
+0:typeset -p array
+>typeset -a a=( 1 'two 2' )
+
+  typeset -i 16 h=255; print $h
+0:Integer with base
+>16#FF
+
+  typeset -Z 3 z=5; typeset -L 2 l=abc; typeset -R 4 r=ab; print "[$z][$l][$r]"
+0:Justification
+>[005][ab][  ab]
+
+  typeset -u u=abc; typeset -l l=ABC; print $u $l
+0:Case conversion
+>ABC abc
+
+  typeset -U p=(a b a c b); print $p
+0:Unique array
+>a b c
+
+  typeset -T COLONS colons; colons=(x y); print $COLONS
+0:Tied parameters
+>x:y
+
+  f() { local v=inner; g }; g() { print $v }; v=outer; f; print $v
+0:Dynamic scoping of locals
+>inner
+>outer
+
+  f() { typeset -g gv=set }; f; print $gv
+0:typeset -g in a function
+>set
+
+  float f=2.5; print $f; typeset -F 3 g=2; print $g
+0:float
+>2.500000000e+00
+>2.000
+
+  export E=1; env | grep '^E='
+0:export
+>E=1
+
+  readonly R=1; typeset -p R
+0:readonly attribute shown
+>typeset -r R=1
+
+  typeset +x NOEXP=1; env | grep -c '^NOEXP='
+1:Not exported
+>0
+
+  typeset -A h; h[a]=1; typeset -p h
+0:typeset -p assoc
+>typeset -A h=( [a]=1 )
+
+  integer i; print $i; i=3*3; print $i
+0:integer evaluates assignments
+>0
+>9
+
+  local x 2>&1
+0:local outside a function is allowed

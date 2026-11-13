@@ -1,0 +1,164 @@
+# Basic grammar: lists, pipelines, compound commands.
+%test
+
+  print hello world
+0:Simple command
+>hello world
+
+  true; false
+1:Status of last command in a list
+
+  false | true
+0:Pipeline status is the last command
+
+  true | false
+1:Pipeline status (false at end)
+
+  true && print yes || print no
+0:And-or list (true)
+>yes
+
+  false && print yes || print no
+0:And-or list (false)
+>no
+
+  ! false
+0:Negated pipeline
+
+  print a |
+  tr a b
+0:Pipeline continues over a newline
+>b
+
+  { print a; print b } | sort -r
+0:Brace group in a pipeline
+>b
+>a
+
+  (print sub)
+0:Subshell
+>sub
+
+  if true; then print then; else print else; fi
+0:if/then/else
+>then
+
+  if false; then print a; elif true; then print b; fi
+0:elif
+>b
+
+  if [[ -n x ]] { print brace-if }
+0:if with brace body
+>brace-if
+
+  for i in 1 2 3; do print $i; done
+0:for loop
+>1
+>2
+>3
+
+  for i (a b) print $i
+0:Short for loop
+>a
+>b
+
+  foreach i (x y)
+  print $i
+  end
+0:foreach loop
+>x
+>y
+
+  for ((i = 0; i < 3; i++)) print $i
+0:Arithmetic for loop
+>0
+>1
+>2
+
+  i=0; while (( i < 2 )); do print $i; (( i++ )); done
+0:while loop
+>0
+>1
+
+  i=0; until (( i >= 2 )); do (( i++ )); done; print $i
+0:until loop
+>2
+
+  repeat 2 print r
+0:repeat
+>r
+>r
+
+  case abc in
+    (x*) print x ;;
+    (a*) print a ;;
+  esac
+0:case with parenthesised patterns
+>a
+
+  case b in a|b) print ab;; esac
+0:case with alternatives
+>ab
+
+  case a in (a) print 1 ;& (b) print 2 ;; (c) print 3 ;; esac
+0:case fall-through ;&
+>1
+>2
+
+  case ab in (a*) print 1 ;| (*b) print 2 ;| (x) print 3 ;; esac
+0:case continue testing ;|
+>1
+>2
+
+  { print try; false } always { print always }
+1:try/always
+>try
+>always
+
+  f() { print in f } ; f
+0:Function definition
+>in f
+
+  function g { print in g } ; g
+0:function keyword
+>in g
+
+  () { print anon $1 } arg
+0:Anonymous function
+>anon arg
+
+  print a; # comment
+  print b # another
+0:Comments
+>a
+>b
+
+  print one \
+  two
+0:Backslash-newline joins lines
+>one two
+
+  x=(; print never
+1:Parse error aborts before running
+?zsh:2: parse error near `\n'
+
+  print a )
+1:Unmatched closing paren
+?zsh:1: parse error near `)'
+
+  select x in a b; do print $x; break; done <<< 2 2>/dev/null
+0:select reads REPLY
+>b
+
+  time
+0dD:bare time
+
+  true &
+  wait
+  print $?
+0:Background job and wait
+>0
+
+  print a &| print -n
+  wait
+0d:Disowned job &|

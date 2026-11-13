@@ -1,0 +1,113 @@
+%test
+
+  x=value; print $x ${x} "${x}"
+0:Basic expansion
+>value value value
+
+  unset u; print ${u:-def} ${u-def2} ${+u} x${u:+alt}x
+0:Default and alternate on unset
+>def def2 0 xx
+
+  e=; print ${e:-d1} x${e-d2}x x${e:+alt}x
+0:Default on empty
+>d1 xx xx
+
+  unset u; print ${u:=assigned} $u
+0:Assign default
+>assigned assigned
+
+  unset u; print ${u:?custom}
+1:Error operator
+?zsh:1: u: custom
+
+  p=/usr/local/lib/libfoo.tar.gz; print ${p#*/} ${p##*/} ${p%.*} ${p%%.*}
+0:Prefix and suffix removal
+>usr/local/lib/libfoo.tar.gz libfoo.tar.gz /usr/local/lib/libfoo.tar /usr/local/lib/libfoo
+
+  p=/usr/local/lib; print ${p/lib/LIB} ${p//l/L} ${p/#\/usr/X} ${p/%lib/LIB}
+0:Replacement
+>/usr/local/LIB /usr/LocaL/Lib X/local/lib /usr/local/LIB
+
+  p=abcdefgh; print ${p:2} ${p:2:3} ${p: -2} ${#p}
+0:Substring and length
+>cdefgh cde gh 8
+
+  p=/a/b/c.txt; print ${p:h} ${p:t} ${p:r} ${p:e} ${p:t:r} ${p:u}
+0:Modifiers
+>/a/b c.txt /a/b/c txt c /A/B/C.TXT
+
+  x='a b c'; print -l ${=x}; setopt shwordsplit; print -l $x
+0:Word splitting
+>a
+>b
+>c
+>a
+>b
+>c
+
+  a=(c a b); print ${(o)a} ${(O)a} ${(j:,:)a}
+0:Sort and join flags
+>a b c c b a c,a,b
+
+  s='x,y,,z'; print -l ${(s:,:)s}; print ${#${(@s:,:)s}}
+0:Split flag
+>x
+>y
+>z
+>3
+
+  s=$'l1\nl2'; print -l ${(f)s}
+0:(f) splits lines
+>l1
+>l2
+
+  s="echo 'a b' | wc"; print -l ${(z)s}
+0:(z) shell word splitting
+>echo
+>'a b'
+>|
+>wc
+
+  s=abc; print ${(U)s} ${(C)${:-hello world}} ${(L)${:-ABC}}
+0:Case flags
+>ABC Hello World abc
+
+  n=42; print ${(l:5::0:)n} ${(r:5::.:)n}
+0:Padding
+>00042 42...
+
+  s="it's"; print -r ${(q)s} ${(qq)s} ${(qqq)s} ${(qqqq)s}
+0:Quoting flags
+>it\'s 'it'\''s' "it's" $'it\'s'
+
+  s="'a b'"; print ${(Q)s}
+0:(Q) removes quotes
+>a b
+
+  ref=HOME; [[ ${(P)ref} == $HOME ]] && print indirect
+0:(P) indirection
+>indirect
+
+  a=(x); typeset -A h; integer i; export E=1; print ${(t)a} ${(t)h} ${(t)i} ${(t)E} ${(t)HOME}
+0:(t) types
+>array association integer scalar-export scalar-export-special
+
+  s='$HOME'; [[ ${(e)s} == $HOME ]] && print evaluated
+0:(e) evaluation
+>evaluated
+
+  print ${(%):-%%}
+0:(%) prompt expansion
+>%
+
+  a=(a b a); print ${(u)a}
+0:(u) unique
+>a b
+
+  print ${${:-nested}:u}
+0:Nested expansion
+>NESTED
+
+  setopt nounset; print $never_set
+1:NO_UNSET
+?zsh:1: never_set: parameter not set

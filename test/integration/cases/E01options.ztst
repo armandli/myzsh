@@ -1,0 +1,40 @@
+%test
+
+  setopt extendedglob; [[ -o extendedglob ]] && print set
+0:setopt
+>set
+
+  setopt EXTENDED_GLOB; unsetopt extended_glob; [[ -o extendedglob ]] || print unset
+0:Option names ignore case and underscores
+>unset
+
+  setopt no_glob; print *
+0:no prefix
+>*
+
+  setopt nosuchoption
+1:Unknown option
+?zsh:setopt:1: no such option: nosuchoption
+
+  setopt extendedglob; setopt | grep extendedglob
+0:setopt lists changed options
+>extendedglob
+
+  set -o | grep -E '^(noglob|xtrace) '
+0:set -o listing uses the no-form for default-on options
+>noglob                off
+>xtrace                off
+
+  emulate sh -c 'x="a b"; print -l $x'
+0:emulate -c
+>a
+>b
+
+  emulate; emulate sh; emulate
+0:emulate reports mode
+>zsh
+>sh
+
+  [[ $- == *f* ]] && print no-rcs
+0:$- reflects -f
+>no-rcs

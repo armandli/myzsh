@@ -1,0 +1,38 @@
+%test
+
+  alias hi='print hello'
+  eval hi
+0:Alias expanded in eval
+>hello
+
+  alias -g UP='| tr a-z A-Z'
+  eval 'print abc UP'
+0:Global alias
+>ABC
+
+  alias ls='ls -d'
+  eval 'ls .'
+0:Recursive alias expands once
+>.
+
+  alias x=y
+  unalias x
+  alias x
+1:unalias removes
+
+  alias -s txt=cat
+  print content > f.txt
+  eval ./f.txt 2>/dev/null || eval f.txt
+0:Suffix alias
+>content
+
+  alias a1='print one; ' a2='print two'
+  eval 'a1 a2'
+0:Alias ending in blank allows next word expansion
+>one
+>two
+
+  alias p='print'
+  eval '\p quoted' 2>&1 | sed 's/.*: //'
+0:Quoted command word is not alias-expanded
+>p
