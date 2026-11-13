@@ -15,11 +15,28 @@ namespace myzsh::ztst {
 //   N:description    expected status (or '-' for any) and flags:
 //                      d  don't compare stdout   D  don't compare stderr
 //                      f  known failure (reported as skipped)
+//                      s  run as a script file   i  run from stdin
+//                         (see Mode; at most one of s and i)
 //   >stdout line
 //   ?stderr line
 //   F:note           printed when the test fails
 //
 // Cases are separated by blank lines; '#' at column 0 is a comment.
+// How the shell gets the code. -c parses the whole string before running
+// anything; script files and stdin are parsed one list at a time
+// (TODO.md §2.3.9), so each needs its own cases.
+enum class Mode : int {
+  // shell -f -c PREP+CODE; the '<' lines are stdin.
+  Command,
+  // PREP+CODE written to a file run as `shell -f FILE`; the '<' lines are
+  // stdin. The file lives outside the working directory, and its path is
+  // shown as "case.zsh" in stdout and stderr ($0, error prefixes).
+  Script,
+  // shell -f with PREP+CODE followed by the '<' lines on stdin, so a
+  // command in the code that reads stdin gets the lines after it.
+  Stdin,
+};
+
 struct Case {
   str file;
   int index = 0;
@@ -33,6 +50,7 @@ struct Case {
   bool check_out = true;
   bool check_err = true;
   bool expected_failure = false;
+  Mode mode = Mode::Command;
   str note;
 };
 
@@ -46,7 +64,7 @@ struct Outcome {
   bool timed_out = false;
 };
 
-// Runs `shell -f -c PREP+CODE` in a fresh temporary directory with a
+// Runs the case (see Mode) in a fresh temporary directory with a
 // minimal environment (PATH=/bin:/usr/bin, HOME=that directory, LC_ALL=C,
 // TERM=xterm-256color). Error prefixes "<shell basename>:" in stderr are
 // rewritten to "zsh:" so expectations can be shared between myzsh and zsh.

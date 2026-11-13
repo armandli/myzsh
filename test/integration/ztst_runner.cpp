@@ -44,7 +44,7 @@ str strip_indent(strv line) {
   return str(line.substr(skip));
 }
 
-// "0:desc", "-:desc", "1f:desc", "0dD:desc"
+// "0:desc", "-:desc", "1f:desc", "0dD:desc", "0s:desc", "1i:desc"
 bool parse_status_line(strv line, Case& test_case) {
   size_t colon = line.find(':');
   if (colon == strv::npos or colon == 0) {
@@ -69,6 +69,11 @@ bool parse_status_line(strv line, Case& test_case) {
     case 'd': test_case.check_out = false;
     break; case 'D': test_case.check_err = false;
     break; case 'f': test_case.expected_failure = true;
+    break; case 's': case 'i':
+      if (test_case.mode != Mode::Command) {
+        return false;
+      }
+      test_case.mode = flag == 's' ? Mode::Script : Mode::Stdin;
     break; default: return false;
     }
   }
@@ -90,6 +95,14 @@ str read_all(int fd) {
 int temp_fd(const test::TempDir& dir, strv name, strv contents) {
   sf::path path = dir.write(name, contents);
   return open(path.c_str(), O_RDWR);
+}
+
+str replace_all(str text, strv from, strv to) {
+  for (size_t at = text.find(from); at != str::npos;
+       at = text.find(from, at + to.size())) {
+    text.replace(at, from.size(), to);
+  }
+  return text;
 }
 
 }  // namespace
@@ -209,14 +222,19 @@ Outcome run_case(const Case& test_case, const sf::path& shell,
                  int timeout_seconds)
 {
   test::TempDir dir;
-  int in_fd = temp_fd(dir, ".ztst-stdin", test_case.input);
+  // Script mode: the script sits in its own directory so the test's
+  // working directory holds only what the test creates.
+  test::TempDir script_dir;
+  str script = test_case.prep + test_case.code;
+  str stdin_text = test_case.mode == Mode::Stdin ? script + test_case.input
+                                                 : test_case.input;
+  int in_fd = temp_fd(dir, ".ztst-stdin", stdin_text);
   int out_fd = temp_fd(dir, ".ztst-stdout", "");
   int err_fd = temp_fd(dir, ".ztst-stderr", "");
   sf::remove(dir / ".ztst-stdin");
   sf::remove(dir / ".ztst-stdout");
   sf::remove(dir / ".ztst-stderr");
 
-  str script = test_case.prep + test_case.code;
   str shell_path = shell.string();
   str home = "HOME=" + dir.path().string();
   vec<str> env_strings{"PATH=/bin:/usr/bin", home, "LC_ALL=C", "TERM=xterm-256color",
@@ -228,8 +246,20 @@ Outcome run_case(const Case& test_case, const sf::path& shell,
   envp.push_back(nullptr);
   str flag_f = "-f";
   str flag_c = "-c";
-  vec<char*> argv{shell_path.data(), flag_f.data(), flag_c.data(),
-                  script.data(), nullptr};
+  str script_path = (script_dir / "case.zsh").string();
+  vec<char*> argv{shell_path.data(), flag_f.data()};
+  switch (test_case.mode) {
+  case Mode::Command:
+    argv.push_back(flag_c.data());
+    argv.push_back(script.data());
+  break; case Mode::Script:
+    script_dir.write("case.zsh", script);
+    argv.push_back(script_path.data());
+  break; case Mode::Stdin:
+  break; default:
+    break;
+  }
+  argv.push_back(nullptr);
 
   posix_spawn_file_actions_t actions;
   posix_spawn_file_actions_init(&actions);
@@ -275,6 +305,10 @@ Outcome run_case(const Case& test_case, const sf::path& shell,
   close(out_fd);
   close(err_fd);
 
+  if (test_case.mode == Mode::Script) {
+    outcome.out = replace_all(outcome.out, script_path, "case.zsh");
+    outcome.err = replace_all(outcome.err, script_path, "case.zsh");
+  }
   str prefix = shell.filename().string() + ":";
   if (prefix != "zsh:") {
     s::regex leading("(^|\n)" + s::regex_replace(

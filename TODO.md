@@ -168,10 +168,11 @@ flowchart LR
      incremental entry point; `parse_program()` is used for `-c`/`eval`.
    - `Shell::run_input(InputSource&, strv name)` is the shared loop for
      scripts, `source`/`.`, `-s`/stdin and non-ZLE interactive input:
-     parse one list → run → `dispatch_signals()` → repeat. A parse error
-     reports, sets status 1 and stops (non-interactive) or discards the line
-     (interactive). `run_file` opens the file and calls `run_input`;
-     `run_string` keeps the whole-string behaviour.
+     parse one list → run → `dispatch_signals()` → repeat. Recovery from a
+     parse error depends on an `InputKind` argument (see §6): a script
+     stops with status 1, a sourced file stops and `source` returns 126,
+     stdin skips the bad line and keeps going. `run_file` opens the file
+     and calls `run_input`; `run_string` keeps the whole-string behaviour.
    - Lexer and parser must keep no state between lists other than pending
      here-documents and line number, so alias changes take effect at the
      next list.
@@ -289,7 +290,9 @@ Unit test suites are named after the struct/function they test, so
       `Shell.RunInputRunsListsBeforeParseError`,
       `Shell.RunFileAliasAppliesToLaterLines`,
       `Shell.RunInputLeavesUnparsedStdinForRead`,
-      `Shell.RunInputSyncsSeekableStdin`
+      `Shell.RunInputSyncsSeekableStdin`,
+      `Shell.RunInputSourcedParseErrorIs126`,
+      `Shell.RunInputStdinRecoversFromParseError`
 - [ ] `builtins/builtin.cpp`: `parse_builtin_args`, `BuiltinTable` with
       every name, flags (`BF_SPECIAL`, `BF_ASSIGN`, `BF_PREFIX`)
 - [ ] `exec/command_hash.cpp`, `exec/functions.cpp`, `exec/redirect.cpp`
@@ -447,21 +450,21 @@ Unit test suites are named after the struct/function they test, so
   temporary directory. `make reference` runs them against the real zsh;
   all 365 pass there, so any failure against myzsh is a myzsh bug.
 
-### Input modes in the integration runner (to add)
-Every case currently runs as `-c`, which parses the whole string first and
-so cannot catch incremental-parsing bugs (§2.3.9). Add two flags to the
-status line, honoured identically for myzsh and zsh so `make reference`
-still validates them:
-- `s` — write PREP+CODE to `case.zsh` in the temp directory and run
-  `shell -f case.zsh`;
-- `i` — feed PREP+CODE on stdin to `shell -f` (the `<` lines are then
-  appended after the code, so a `read` in the script consumes them).
+### Input modes in the integration runner
+By default a case runs as `-c`, which parses the whole string first and so
+cannot catch incremental-parsing bugs (§2.3.9). Two status-line flags
+select the other modes, run identically for myzsh and zsh so
+`make reference` validates them:
+- `s` — PREP+CODE is written to a file outside the working directory and
+  run as `shell -f FILE`; the file's path is shown as `case.zsh` in
+  stdout/stderr (`$0`, error prefixes);
+- `i` — PREP+CODE followed by the `<` lines is fed on stdin to `shell -f`,
+  so a command in the code that reads stdin gets what follows it.
 
-New file `A08input.ztst`, at least: parse error late in a script runs the
-earlier lines; alias defined in a script applies to later lines (and does
-not under `-c`); `source` behaves like a script; `read` from a piped script
-reads the following script lines; a here-doc and a multi-line `if` spanning
-list boundaries in stdin mode.
+`A08input.ztst` covers: parse errors in each mode, aliases defined in a
+script/sourced file (and not under `-c`), `read` and `cat` consuming the
+rest of a stdin script, multi-line constructs and here-docs in stdin mode,
+`$0` and `exit` in scripts.
 
 ### Interactive tests through a pty (to add)
 ZLE, job control and signal handling cannot be tested through `-c`.
@@ -509,6 +512,12 @@ Checked against zsh 5.9; each is pinned by a test.
   lines 1–4's output, then `s.zsh:5: parse error near `('`, status 1; an
   alias defined on line 2 works on line 3. `printf 'read x\nhello\necho
   got=$x\n' | zsh -f` prints `got=hello`.
+- What a parse error does depends on where the input came from: a script
+  stops (`s.zsh:2: parse error near `)'`, exit 1); a sourced file stops
+  with the same message and `source` returns **126** while the caller
+  continues; on stdin (`-s` or a pipe) the message has **no line number**
+  (`zsh: parse error near `)'`), the bad line is skipped, `$?` is 1 and
+  reading continues — the exit status is that of the last command.
 - In a non-interactive shell an expansion error (`${x:?}`, no glob match,
   bad math) aborts the whole script with status 1 — `always` blocks do not
   get a chance. Builtin `break` outside a loop is fatal too.

@@ -37,6 +37,13 @@ struct ControlFlow {
   }
 };
 
+// Where run_input's input comes from; decides parse error recovery.
+enum class InputKind : int {
+  Script,
+  Sourced,
+  Stdin,
+};
+
 // One `sched` entry (Src/Modules/sched.c, compiled in).
 struct SchedEvent {
   // Seconds since the epoch.
@@ -77,12 +84,16 @@ struct Shell {
   // Script files, source/., -s and stdin: parses one list at a time and
   // runs it before reading the next (TODO.md §2.3.9), calling
   // input.sync_position() before each list so commands that read the same
-  // fd start after it. A parse error is reported and stops the input with
-  // status 1; the lists before it have already run.
-  int run_input(InputSource& input, strv name);
+  // fd start after it. The lists before a parse error have already run;
+  // what happens at the error depends on `kind` (checked against zsh 5.9):
+  //   Script   "NAME:LINE: parse error near `X'", stop, return 1
+  //   Sourced  same message, stop the file, return 126
+  //   Stdin    "zsh: parse error near `X'" (no line number), skip to the
+  //            next line, $? = 1, keep going; returns the last status
+  int run_input(InputSource& input, strv name, InputKind kind);
   // `source` / `.`: runs a file in the current shell with optional
-  // positional parameters, through run_input over an FdInput. Returns 127
-  // and reports if the file is missing.
+  // positional parameters, through run_input(Sourced) over an FdInput.
+  // Returns 127 and reports if the file is missing.
   int run_file(strv path, const vec<str>* arguments = nullptr);
   // Read-eval loop on the terminal (ZLE if USE_ZLE and a tty; otherwise
   // run_input-style reading of stdin with prompts): preprompt(), PS1/RPS1,

@@ -1,0 +1,105 @@
+# How the shell reads its input (TODO.md §2.3.9). -c parses the whole
+# string first; script files, sourced files and stdin are parsed and run
+# one list at a time. Flags: s = run as a script file, i = feed on stdin.
+
+%test
+
+  print one
+  print two
+  )
+  print three
+1:-c: a parse error anywhere means nothing runs
+?zsh:3: parse error near `)'
+
+  print one
+  print two
+  )
+  print three
+1s:script: the lines before a parse error run, then the script stops
+>one
+>two
+?case.zsh:3: parse error near `)'
+
+  print one
+  )
+  print status=$?
+0i:stdin: a parse error is skipped and reading continues
+>one
+>status=1
+?zsh: parse error near `)'
+
+  print one
+  )
+1i:stdin: a parse error on the last line gives status 1
+>one
+?zsh: parse error near `)'
+
+  print 'print first' > sourced.zsh
+  print ')' >> sourced.zsh
+  print 'print never' >> sourced.zsh
+  source ./sourced.zsh
+  print status=$?
+0:source: a parse error stops the file and source returns 126
+>first
+>status=126
+?./sourced.zsh:2: parse error near `)'
+
+  alias hi='print aliased'
+  hi
+127:-c: an alias does not apply to later lines of the same string
+?zsh:2: command not found: hi
+
+  alias hi='print aliased'
+  hi
+0s:script: an alias applies to the script's later lines
+>aliased
+
+  alias hi='print aliased'
+  hi
+0i:stdin: an alias applies to later lines
+>aliased
+
+  print "alias hi='print aliased'" > sourced.zsh
+  print 'hi' >> sourced.zsh
+  source ./sourced.zsh
+0:source: an alias applies to the sourced file's later lines
+>aliased
+
+  read x
+  hello there
+  print got=$x
+0i:stdin: read gets the script's next line
+>got=hello there
+
+  print before
+  cat
+<rest of
+<the input
+0i:stdin: a command gets the input after the code
+>before
+>rest of
+>the input
+
+  if true; then
+    print in-if
+  fi
+  cat <<EOF
+  body
+  EOF
+  print after
+0i:stdin: multi-line constructs and here-documents
+>in-if
+>body
+>after
+
+  print $0
+  exit 4
+  print not reached
+4s:script: $0 is the script name and exit ends it
+>case.zsh
+
+  print one
+  exit 3
+  print not reached
+3i:stdin: exit ends the input
+>one

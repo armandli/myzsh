@@ -99,11 +99,35 @@ TEST(Shell, RunInputRunsListsBeforeParseError) {
   auto shell = test::make_shell();
   StringInput input("print one\n)\nprint two\n");
   test::Captured result = test::capture([&] {
-    return shell->run_input(input, "s.zsh");
+    return shell->run_input(input, "s.zsh", InputKind::Script);
   });
   EXPECT_EQ(result.out, "one\n");
   EXPECT_EQ(result.status, 1);
   EXPECT_EQ(result.err, "s.zsh:2: parse error near `)'\n");
+}
+
+// A parse error ends a sourced file with status 126; the caller goes on.
+TEST(Shell, RunInputSourcedParseErrorIs126) {
+  auto shell = test::make_shell();
+  StringInput input("print one\n)\nprint two\n");
+  test::Captured result = test::capture([&] {
+    return shell->run_input(input, "./s.zsh", InputKind::Sourced);
+  });
+  EXPECT_EQ(result.out, "one\n");
+  EXPECT_EQ(result.status, 126);
+  EXPECT_EQ(result.err, "./s.zsh:2: parse error near `)'\n");
+}
+
+// On stdin zsh skips the bad line and keeps reading.
+TEST(Shell, RunInputStdinRecoversFromParseError) {
+  auto shell = test::make_shell();
+  StringInput input("print one\n)\nprint status=$?\n");
+  test::Captured result = test::capture([&] {
+    return shell->run_input(input, "zsh", InputKind::Stdin);
+  });
+  EXPECT_EQ(result.out, "one\nstatus=1\n");
+  EXPECT_EQ(result.status, 0);
+  EXPECT_EQ(result.err, "zsh: parse error near `)'\n");
 }
 
 TEST(Shell, RunFileAliasAppliesToLaterLines) {
@@ -133,7 +157,7 @@ TEST(Shell, RunInputLeavesUnparsedStdinForRead) {
   auto shell = test::make_shell();
   FdInput input(0);
   test::Captured result = test::capture([&] {
-    return shell->run_input(input, "zsh");
+    return shell->run_input(input, "zsh", InputKind::Stdin);
   });
   dup2(saved_stdin, 0);
   close(saved_stdin);
@@ -153,7 +177,7 @@ TEST(Shell, RunInputSyncsSeekableStdin) {
   auto shell = test::make_shell();
   FdInput input(0);
   test::Captured result = test::capture([&] {
-    return shell->run_input(input, "zsh");
+    return shell->run_input(input, "zsh", InputKind::Stdin);
   });
   dup2(saved_stdin, 0);
   close(saved_stdin);

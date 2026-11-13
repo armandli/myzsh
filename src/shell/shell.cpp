@@ -41,10 +41,11 @@ int Shell::run_string(strv source, strv name) {
   todo("Shell::run_string");
 }
 
-int Shell::run_input(InputSource& input, strv name) {
+int Shell::run_input(InputSource& input, strv name, InputKind kind) {
   // TODO(impl): Lexer over `input` with the alias expander set; loop
-  // Parser::parse_line(): on error report it and return 1 (this is zsh's
-  // loop() in Src/init.c); on nullopt return status; otherwise
+  // Parser::parse_line() (zsh's loop() in Src/init.c): on error report it
+  // and recover per `kind` (see shell.h); on nullopt return status;
+  // otherwise
   // input.sync_position(), execute, dispatch_signals(), stop when
   // flow.exiting or flow.returning (return ends a sourced file). Aliases
   // take effect from the next list because the lexer consults the alias
@@ -55,8 +56,9 @@ int Shell::run_input(InputSource& input, strv name) {
 int Shell::run_file(strv path, const vec<str>* arguments) {
   // TODO(impl): search $path for names without '/' when not found
   // (PATH_SCRIPT / `.` semantics); SOURCE_TRACE; return statement ends the
-  // file. Open the file as an FdInput and hand it to run_input: it is
-  // parsed and run one list at a time, not read whole.
+  // file. Open the file as an FdInput and hand it to
+  // run_input(InputKind::Sourced): it is parsed and run one list at a time,
+  // not read whole; a parse error in it makes source return 126.
   todo("Shell::run_file");
 }
 
