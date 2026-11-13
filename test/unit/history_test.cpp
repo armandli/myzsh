@@ -87,7 +87,7 @@ TEST_F(HistoryTest, FileRoundTripExtended) {
   options.extended = true;
   add_all({"echo one", "multi\nline"});
   sf::path file = dir / "hist";
-  ASSERT_TRUE(history.write_file(file.string(), 100, false, options));
+  ASSERT_TRUE(history.rewrite(file.string(), 100, options));
   EXPECT_EQ(test::read_file(file),
             ": 1700000000:0;echo one\n: 1700000001:0;multi\\\nline\n");
   History loaded;
@@ -104,14 +104,63 @@ TEST_F(HistoryTest, ReadsPlainFormat) {
   EXPECT_EQ(history.size(), 2u);
 }
 
-TEST_F(HistoryTest, WriteRespectsLimitAndAppend) {
+TEST_F(HistoryTest, RewriteRespectsLimitThenAppendWritesOnlyNew) {
   test::TempDir dir;
   add_all({"a", "b", "c"});
   sf::path file = dir / "hist";
-  history.write_file(file.string(), 2, false, options);
+  ASSERT_TRUE(history.rewrite(file.string(), 2, options));
   EXPECT_EQ(test::read_file(file), "b\nc\n");
-  history.write_file(file.string(), 1, true, options);
-  EXPECT_EQ(test::read_file(file), "b\nc\nc\n");
+  EXPECT_EQ(history.saved_up_to(), history.next_number());
+  ASSERT_TRUE(history.append_new(file.string(), options));
+  EXPECT_EQ(test::read_file(file), "b\nc\n");
+  add_all({"d"});
+  ASSERT_TRUE(history.append_new(file.string(), options));
+  EXPECT_EQ(test::read_file(file), "b\nc\nd\n");
+}
+
+// jfsh bug B5: appending every entry doubles the file each session.
+TEST_F(HistoryTest, AppendAcrossSessionsDoesNotDuplicate) {
+  test::TempDir dir;
+  sf::path file = dir / "hist";
+  for (strv command : {"one", "two", "three"}) {
+    History session;
+    session.read_file(file.string());
+    session.add(command, 1700000000, options);
+    ASSERT_TRUE(session.append_new(file.string(), options));
+  }
+  EXPECT_EQ(test::read_file(file), "one\ntwo\nthree\n");
+}
+
+TEST_F(HistoryTest, ReadNewSeesOtherShellsEntries) {
+  test::TempDir dir;
+  sf::path file = dir.write("hist", "old\n");
+  History first;
+  History second;
+  ASSERT_TRUE(first.read_file(file.string()));
+  ASSERT_TRUE(second.read_file(file.string()));
+  first.add("from first", 1700000000, options);
+  ASSERT_TRUE(first.append_new(file.string(), options));
+  ASSERT_TRUE(second.read_new(file.string()));
+  ASSERT_EQ(second.size(), 2u);
+  EXPECT_EQ(second.entries()[1].text, "from first");
+  // Read entries count as saved: appending does not write them back.
+  ASSERT_TRUE(second.append_new(file.string(), options));
+  EXPECT_EQ(test::read_file(file), "old\nfrom first\n");
+}
+
+TEST_F(HistoryTest, GetOutOfRange) {
+  add_all({"a", "b"});
+  EXPECT_FALSE(history.get(0));
+  EXPECT_FALSE(history.get(-1));
+  EXPECT_FALSE(history.get(history.next_number()));
+}
+
+TEST_F(HistoryTest, IgnoreAllDupsKeepsNewest) {
+  options.ignore_all_dups = true;
+  add_all({"a", "b", "a"});
+  ASSERT_EQ(history.size(), 2u);
+  EXPECT_EQ(history.entries()[0].text, "b");
+  EXPECT_EQ(history.entries()[1].text, "a");
 }
 
 TEST_F(HistoryTest, BangExpansionEvents) {

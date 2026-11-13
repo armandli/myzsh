@@ -20,10 +20,14 @@ namespace myzsh {
 struct Parser {
   explicit Parser(Lexer& lexer) : mLexer(lexer) {}
 
-  // Parses all remaining input.
+  // Parses all remaining input before anything runs: -c and eval.
   s::expected<ast::List, ParseError> parse_program();
-  // Parses up to the end of the next complete line (interactive mode, and
-  // `eval` of a multi-line string runs line by line). nullopt at EOF.
+  // Parses the next complete list up to and including its terminating
+  // newline, and reads nothing beyond it, so the caller can run it before
+  // more input is consumed. The incremental entry point for script files,
+  // source, stdin and interactive lines (Shell::run_input). nullopt at EOF.
+  // On an error the rest of the current line is skipped, so an interactive
+  // caller can carry on with the next line.
   s::expected<opt<ast::List>, ParseError> parse_line();
 
 protected:

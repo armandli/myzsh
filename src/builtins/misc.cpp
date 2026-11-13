@@ -45,4 +45,12 @@ int bi_ttyctl(Shell& shell, const vec<str>& args) {
   todo("bi_ttyctl");
 }
 
+int bi_sched(Shell& shell, const vec<str>& args) {
+  // TODO(impl): sched [-o] [+]hh:mm[:ss] cmd / sched [+]seconds cmd adds to
+  // Shell::sched_events (kept sorted); sched alone lists
+  // "  1 Thu Nov 12 10:00:00 cmd"; sched -N removes item N. Events run from
+  // Shell::preprompt and while ZLE is idle (Shell::run_sched_events).
+  todo("bi_sched");
+}
+
 }  // namespace myzsh

@@ -114,13 +114,45 @@ TEST_F(EditorTest, UserWidgetFunctionSeesBuffer) {
 TEST_F(EditorTest, ReadLineFromKeySource) {
   str keys = "ls -l\r";
   size_t index = 0;
-  auto line = editor.read_line("% ", "", [&](int) -> opt<char> {
+  auto line = editor.read_line("% ", "", [&](int) -> KeyRead {
     if (index < keys.size()) {
-      return keys[index++];
+      return KeyRead::of(keys[index++]);
     }
-    return s::nullopt;
+    return KeyRead{};
   });
   EXPECT_EQ(line, "ls -l");
+}
+
+// jfsh bug B29: EOF from the terminal must end read_line, not loop.
+TEST_F(EditorTest, ReadLineEndsOnEndOfFile) {
+  int calls = 0;
+  auto line = editor.read_line("% ", "", [&](int) -> KeyRead {
+    if (++calls > 100) {
+      ADD_FAILURE() << "read_line kept reading after EndOfFile";
+      return KeyRead::of('\r');
+    }
+    return calls == 1 ? KeyRead::of('x') : KeyRead{};
+  });
+  EXPECT_FALSE(line);
+}
+
+TEST_F(EditorTest, ReadLineContinuesAfterInterrupt) {
+  vec<KeyRead> reads{KeyRead::of('a'), {KeyRead::Status::Interrupted},
+                     {KeyRead::Status::TimedOut}, KeyRead::of('b'),
+                     KeyRead::of('\r')};
+  size_t index = 0;
+  auto line = editor.read_line("% ", "", [&](int) -> KeyRead {
+    return index < reads.size() ? reads[index++] : KeyRead{};
+  });
+  EXPECT_EQ(line, "ab");
+}
+
+TEST_F(EditorTest, BracketedPasteInsertsWithoutAccepting) {
+  editor.process_keys("\x1b[200~");
+  type("echo a\recho b");
+  editor.process_keys("\x1b[201~");
+  EXPECT_FALSE(editor.finished());
+  EXPECT_EQ(editor.buffer().text, "echo a\necho b");
 }
 
 }  // namespace

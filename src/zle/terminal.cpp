@@ -29,8 +29,10 @@ void Terminal::restore() {
   todo("Terminal::restore");
 }
 
-opt<char> Terminal::read_byte(int timeout_ms) {
-  // TODO(impl): poll() then read().
+KeyRead Terminal::read_byte(int timeout_ms) {
+  // TODO(impl): poll() then read(). poll/read failing with EINTR ->
+  // Interrupted; poll returning 0 -> TimedOut; read returning 0, POLLHUP
+  // or another error -> EndOfFile.
   todo("Terminal::read_byte");
 }
 

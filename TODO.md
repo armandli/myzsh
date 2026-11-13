@@ -40,7 +40,8 @@ In scope (the zsh "core" plus the parts of modules people rely on daily):
 - history (file formats, options, `!` expansion, `fc`)
 - prompt expansion
 - interactive shell: startup files, ZLE line editor (emacs/vi keymaps,
-  kill ring, undo, history search), basic completion
+  kill ring, undo, history search, bracketed paste), basic completion,
+  `precmd`/`periodic`/`sched`/mail checks between commands
 
 Out of scope until everything above passes (milestone 13): the compsys
 completion framework (`compinit`, `_arguments`, `zstyle`), `zcompile`/`.zwc`,
@@ -57,6 +58,7 @@ loadable modules as shared objects (modules we need are compiled in),
 |-----------------------------------|----------------------------------------|
 | `main.c`, `init.c`                | `main.cpp`, `shell/shell.*`, `shell/cmdline.*` |
 | `options.c`                       | `shell/options.*` (table generated from `optns[]`) |
+| `input.c`                         | `parse/input.*` (`InputSource`: string, fd) |
 | `lex.c`                           | `parse/lexer.*`, `parse/token.*`       |
 | `parse.c` (wordcode)              | `parse/parser.*` → `parse/ast.h` (tree) |
 | `text.c`                          | `parse/text.*`                         |
@@ -83,10 +85,10 @@ loadable modules as shared objects (modules we need are compiled in),
 
 ```mermaid
 flowchart LR
-  IN[input: -c string / script / stdin / ZLE] --> HX[History::expand<br/>interactive only]
+  IN[InputSource<br/>-c / eval string · script / source / stdin fd · ZLE line] --> HX[History::expand<br/>interactive only]
   HX --> LX[Lexer<br/>+ alias expansion]
   LX --> PS[Parser]
-  PS --> AST[(ast::List)]
+  PS -->|"-c, eval: whole input<br/>files, stdin, ZLE: one list at a time"| AST[(ast::List)]
   AST --> EX[Executor]
   EX -->|words| XP[Expander]
   XP --> WP[parse_word] --> PE[ParamExpander / cmd subst / arith]
@@ -141,6 +143,49 @@ flowchart LR
    `report_builtin_error` add `NAME:LINE:` / `NAME:builtin:LINE:`. The
    integration runner rewrites the `myzsh:` prefix to `zsh:` so the same
    expectations work for both shells.
+9. **The lexer reads from an `InputSource`, not a string.** (Corrected after
+   comparing with jfsh; the original skeleton had `Lexer(strv)` and parsed
+   every non-interactive input whole, which is only right for `-c`.) zsh
+   parses a script file, a `source`d file and stdin **one top-level list at
+   a time**, executing each before reading the next (`loop()` in
+   `Src/init.c`), so:
+   - a parse error at line 5 still runs lines 1–4 (`s.zsh:5: parse error`);
+   - an alias defined in a script/sourced file applies to its later lines;
+   - with `zsh < script` or `cmd | zsh`, a `read` in the script consumes the
+     **next lines of the script** — the shell must not read stdin ahead of
+     the parser.
+   `-c` and `eval` still parse the whole string first (§6). Design:
+   - `parse/input.h`: `InputSource` with `next_char()`, `unget()`,
+     `push_text()` (alias text) and `sync_position()`; subclasses supply
+     `read_char()`. `StringInput` holds a `str`; `FdInput` reads an fd it
+     does not own. `FdInput` on a seekable fd reads in blocks and
+     `sync_position()` `lseek`s back over the unconsumed bytes before any
+     command runs; on a pipe/tty it reads one byte at a time (zsh's `SHIN`
+     handling with `shinbufreset`). Line counting stays in the `Lexer`.
+   - `Lexer(InputSource&)`; `Lexer(strv)` stays as a convenience that wraps
+     a `StringInput` (tests, `tokenize`, history word splitting).
+   - `Parser::parse_line()` ("next complete list, nullopt at EOF") is the
+     incremental entry point; `parse_program()` is used for `-c`/`eval`.
+   - `Shell::run_input(InputSource&, strv name)` is the shared loop for
+     scripts, `source`/`.`, `-s`/stdin and non-ZLE interactive input:
+     parse one list → run → `dispatch_signals()` → repeat. A parse error
+     reports, sets status 1 and stops (non-interactive) or discards the line
+     (interactive). `run_file` opens the file and calls `run_input`;
+     `run_string` keeps the whole-string behaviour.
+   - Lexer and parser must keep no state between lists other than pending
+     here-documents and line number, so alias changes take effect at the
+     next list.
+10. **History tracks what is already on disk.** `History` keeps
+    `mSavedUpTo` (the first event number not yet written to `HISTFILE`) and
+    the file's size/mtime at the last read. Appending writes only
+    `[mSavedUpTo, end)` — writing every entry (what a stateless
+    `write_file(append=true)` would do) doubles the file each session, which
+    is jfsh bug B5. This state is also what `INC_APPEND_HISTORY`,
+    `INC_APPEND_HISTORY_TIME` and `SHARE_HISTORY` need: append one entry
+    after each command, and (SHARE) read entries other shells appended since
+    the last read. Writes are done under an `fcntl` lock (`HIST_FCNTL_LOCK`)
+    or zsh's `$HISTFILE.LOCK` file otherwise; rewrites go through a temp file
+    and `rename` unless `HIST_SAVE_BY_COPY` is unset.
 
 ### 2.4 Coding conventions
 
@@ -175,15 +220,28 @@ Unit test suites are named after the struct/function they test, so
   InterpretEscapes* ParseDecimal* Option* LookupOption* TokenHelpers*`
 
 ### M1 — lexer, parser, text
+- [ ] `parse/input.cpp`: `InputSource`, `StringInput`, `FdInput`
+      (§2.3.9); `FdInput` must never consume bytes the parser has not asked
+      for on a non-seekable fd, and must hand back read-ahead on a seekable
+      one (`sync_position()` called before executing each list)
+- [ ] `Lexer` reads through `InputSource&` via its private `next_char()`/
+      `unget()` (the `strv` constructor owns a `StringInput`); `incomplete()`
+      means "the source hit EOF mid-construct", which drives PS2 in
+      interactive mode and a parse error otherwise
 - [ ] `parse/lexer.cpp`: context-sensitive tokens (command position, cond
       mode, case patterns), fd numbers, `EnvString`/`EnvArray`, `((` as one
       String up to `))`, comments, backslash-newline, here-doc queue, alias
       push-back with recursion guard, `incomplete()` for PS2
 - [ ] `parse/parser.cpp`: the grammar in §1 including the short forms; error
-      text `parse error near `X'`, line numbers, `incomplete` flag
+      text `parse error near `X'`, line numbers, `incomplete` flag;
+      `parse_line()` stops after one complete list and leaves the source
+      positioned right after it (the newline or `;` is consumed, nothing
+      more)
 - [ ] `parse/text.cpp`: zsh's `functions` format (tabs, `|&` printed as
       `2>&1 |`)
-- Done when: `Lexer* Parser* ParserErrors* Text*`
+- Done when: `InputSource* FdInput* Lexer* Parser* ParserErrors* Text*`
+  (including `Parser.ParseLineIsIncremental` and
+  `Parser.ParseLineLeavesRestUnread`)
 
 ### M2 — parameters and arithmetic
 - [ ] `params/param.cpp`: storage with a per-name definition stack for
@@ -224,6 +282,14 @@ Unit test suites are named after the struct/function they test, so
 ### M5 — execution core (first runnable shell)
 - [ ] `shell/cmdline.cpp`, `main.cpp` flow, `Shell::init/run/run_string/
       run_file/report_error`
+- [ ] `Shell::run_input(InputSource&, strv name)` (§2.3.9): the
+      incremental loop used by script files, `source`/`.`, `-s` and stdin;
+      `run_string` (whole parse) only for `-c` and `eval`. Pinned by
+      `Shell.RunStringParsesWholeStringFirst`,
+      `Shell.RunInputRunsListsBeforeParseError`,
+      `Shell.RunFileAliasAppliesToLaterLines`,
+      `Shell.RunInputLeavesUnparsedStdinForRead`,
+      `Shell.RunInputSyncsSeekableStdin`
 - [ ] `builtins/builtin.cpp`: `parse_builtin_args`, `BuiltinTable` with
       every name, flags (`BF_SPECIAL`, `BF_ASSIGN`, `BF_PREFIX`)
 - [ ] `exec/command_hash.cpp`, `exec/functions.cpp`, `exec/redirect.cpp`
@@ -235,7 +301,8 @@ Unit test suites are named after the struct/function they test, so
       break continue eval source . set setopt unsetopt typeset local`
 - Done when: `CommandLine* Shell* ParseBuiltinArgs* BuiltinTable*
   CommandHashTest* FunctionTable* LoadAutoload* RedirectTest* ExecutorTest*`
-  and integration `A01*`–`A07*` mostly pass (`make integration FILTER='*A0*'`)
+  and integration `A01*`–`A07*` mostly pass (`make integration FILTER='*A0*'`),
+  including the new `A08input.ztst` (script / stdin modes, see §5)
 
 ### M6 — subprocess expansions and globbing
 - [ ] command substitution, `$( )` status, process substitution
@@ -272,9 +339,18 @@ Unit test suites are named after the struct/function they test, so
 - [ ] `history/history.cpp`: storage + options, file read/write (extended
       format, continuation lines), search, `!` expansion with designators
       and modifiers, `^a^b`
+- [ ] history file state (§2.3.10): `mSavedUpTo`, last-read size/mtime;
+      replace the stateless `write_file(append)` with
+      `append_new(path, options)` (only unsaved entries), `rewrite(path,
+      limit, options)` (SAVEHIST trim, temp file + rename) and
+      `read_new(path)` (entries appended by other shells, for
+      SHARE_HISTORY); `fcntl`/`.LOCK` locking; INC_APPEND_HISTORY(_TIME)
+      and SHARE_HISTORY wired into `run_interactive`
 - [ ] `fc`/`history`/`r` builtins, `print -s`, HISTFILE load/save in
       `Shell::init`/`exit_shell`
-- Done when: `HistoryTest* SplitHistoryWords*`, integration `W01*`
+- Done when: `HistoryTest* SplitHistoryWords*` (including
+  `AppendAcrossSessionsDoesNotDuplicate`, `ReadNewSeesOtherShellsEntries`,
+  `GetOutOfRange`, `IgnoreAllDupsKeepsNewest`), integration `W01*`
 
 ### M10 — prompts
 - [ ] `prompt/prompt.cpp`: all escapes, conditionals, truncation, colours,
@@ -290,8 +366,31 @@ Unit test suites are named after the struct/function they test, so
 - [ ] `Shell::run_interactive`: startup files (§4), PS1/RPS1/PS2, precmd/
       preexec/chpwd hooks, IGNORE_EOF, CHECK_JOBS, job notifications,
       HUP on exit, history integration, history expansion of input lines
+      (HIST_VERIFY: put the expanded line back in the editor instead of
+      running it). Each prompt cycle, in zsh's order (`Src/init.c` `loop()`,
+      `preprompt()`): `dispatch_signals()` → job notifications → `precmd`
+      functions → `periodic` when `$PERIOD` has elapsed → `sched` events due
+      → mail check (`MAIL`/`MAILPATH`, every `MAILCHECK` seconds) → prompt
+- [ ] `sched` builtin and its event queue (`Modules/sched.c`, compiled in),
+      also checked while ZLE waits for a key
+- [ ] `Shell::preprompt`, `run_sched_events`, `check_mail`, `bi_sched`
+      (events in `Shell::sched_events`)
+- [ ] ZLE must stay responsive to signals: `Terminal::read_byte` and the
+      editor's `KeySource` return a `KeyRead` whose status separates
+      `Byte`, `EndOfFile`, `Interrupted` and `TimedOut` (one `nullopt` for
+      all of them invites jfsh bug B29: a closed tty spinning at 100% CPU).
+      On `Interrupted` the editor runs `dispatch_signals()`; with NOTIFY a
+      job finishing prints its status above the prompt and redraws;
+      SIGWINCH calls `LineEditor::resize`, which updates `$COLUMNS`/`$LINES`
+      and redraws
+- [ ] Ctrl-C at the prompt (`send-break`) discards the line and redraws;
+      Ctrl-C / Ctrl-Z during a foreground job reach only the job (the shell
+      has its own process group and ignores SIGINT/SIGTSTP/SIGTTOU while
+      interactive)
+- [ ] bracketed paste (`bracketed-paste` widget, `zle_bracketed_paste`)
 - Done when: `LineBuffer* KeySequence* Keymap* DefaultKeymaps* KeymapSet*
-  Display* EditorTest*`; manual test with `make run`
+  Display* EditorTest* TerminalTest* Shell.SchedEventRunsFromPreprompt`,
+  and the pty tests (§5) pass
 
 ### M12 — completion
 - [ ] `complete/completer.cpp`: context classification, commands/files/
@@ -325,8 +424,9 @@ Unit test suites are named after the struct/function they test, so
    (login) `/etc/zlogin`, `.zlogin`. `ZDOTDIR` defaults to `$HOME`.
    While developing, run with `-f` or a private `ZDOTDIR` so your real zsh
    configuration is not executed by a half-finished shell.
-6. dispatch: `-c` (whole string parsed first), script, `-s`/stdin,
-   interactive loop
+6. dispatch: `-c` (whole string parsed first, `run_string`); script file
+   and `-s`/stdin (one list at a time, `run_input` over an `FdInput`);
+   interactive loop (ZLE, or `run_input` on stdin when not a tty / NO_ZLE)
 7. exit: EXIT trap, save history, `.zlogout` for login shells, SIGHUP to jobs
    (unless NO_HUP / disowned)
 
@@ -346,6 +446,33 @@ Unit test suites are named after the struct/function they test, so
   format, run by `integration_tests` as `myzsh -f -c '...'` in a fresh
   temporary directory. `make reference` runs them against the real zsh;
   all 365 pass there, so any failure against myzsh is a myzsh bug.
+
+### Input modes in the integration runner (to add)
+Every case currently runs as `-c`, which parses the whole string first and
+so cannot catch incremental-parsing bugs (§2.3.9). Add two flags to the
+status line, honoured identically for myzsh and zsh so `make reference`
+still validates them:
+- `s` — write PREP+CODE to `case.zsh` in the temp directory and run
+  `shell -f case.zsh`;
+- `i` — feed PREP+CODE on stdin to `shell -f` (the `<` lines are then
+  appended after the code, so a `read` in the script consumes them).
+
+New file `A08input.ztst`, at least: parse error late in a script runs the
+earlier lines; alias defined in a script applies to later lines (and does
+not under `-c`); `source` behaves like a script; `read` from a piped script
+reads the following script lines; a here-doc and a multi-line `if` spanning
+list boundaries in stdin mode.
+
+### Interactive tests through a pty (to add)
+ZLE, job control and signal handling cannot be tested through `-c`.
+Add `test/interactive/` driving `myzsh -f -i` under `forkpty` with
+`TERM=dumb` and a fixed size: send keys, wait for a prompt marker
+(`PS1=$'\n%%PROMPT%% '`), assert on output. Cases: Ctrl-C at the prompt
+discards the line; Ctrl-C during `sleep 10` kills only `sleep`; Ctrl-Z
+then `fg`; `NOTIFY` message while editing; SIGWINCH updates `$COLUMNS`;
+closing the pty master makes the shell exit (not spin); multi-line PS1 is
+not reprinted per keystroke; bracketed paste inserts text without running
+it. Run the same scenarios against zsh where the output is comparable.
 
 ### .ztst format (subset of zsh's)
 ```
@@ -377,6 +504,11 @@ Checked against zsh 5.9; each is pinned by a test.
 - `zsh -c` parses the **entire** string before running anything: a parse
   error later in the script means nothing runs, and aliases defined in the
   script do not apply to later lines of the same `-c` string (use `eval`).
+- Script files, `source`/`.` and stdin are the opposite: parsed and run
+  one list at a time. `zsh -f s.zsh` with a parse error on line 5 prints
+  lines 1–4's output, then `s.zsh:5: parse error near `('`, status 1; an
+  alias defined on line 2 works on line 3. `printf 'read x\nhello\necho
+  got=$x\n' | zsh -f` prints `got=hello`.
 - In a non-interactive shell an expansion error (`${x:?}`, no glob match,
   bad math) aborts the whole script with status 1 — `always` blocks do not
   get a chance. Builtin `break` outside a loop is fatal too.
@@ -403,6 +535,30 @@ Checked against zsh 5.9; each is pinned by a test.
   history; `print -s` entries are visible to `fc -l` though.
 - Assoc subscripts: `(i)/(I)` match keys, `(r)/(R)` match values, `(k)/(K)`
   use the stored keys as patterns against the subscript.
+
+### Pitfalls found in jfsh (`../jeff/jfsh/TODO.md` Part 2)
+
+A sibling reimplementation hit these; each deserves a test here.
+- Options: `nomatch` and `notify` are real names, not `no`+`match` /
+  `no`+`tify`; the caller must learn whether a `no` prefix negated (B15).
+- Jobs: job number 0 must never be handed out if 0 means "free" (B4);
+  `kill` of a process group must reject pgid ≤ 1 (B17, signals init or
+  the shell itself); `%+`/`%-` must be updated when a job is reaped (B41);
+  `waitpid` for foreground jobs needs `WUNTRACED` or Ctrl-Z hangs the
+  shell (B14).
+- History: append mode doubling the file (B5, §2.3.10); `get(0)`
+  out-of-bounds (B6); HIST_IGNORE_ALL_DUPS removes the **older** entry and
+  keeps the new one (B58).
+- Prompt: `%~` must match `$HOME` on a path-component boundary
+  (`/Users/ab` is not `~b`) and read `HOME` from the shell's parameters,
+  not `getenv` (B36, B61); widths count display columns, not bytes (B25).
+- ZLE: Ctrl-C at the prompt (B24), EOF from the terminal (B29), redraw of
+  multi-line prompts (B26), SIGWINCH (B27), completion inserts relative to
+  the word being completed, not the line (B28).
+- ERR_EXIT is applied by the executor with zsh's exemptions, never by the
+  REPL on every line (B33).
+- Unimplemented builtins must fail loudly — myzsh's `todo()` throws, keep
+  it that way rather than returning 0 (B19).
 
 ---
 

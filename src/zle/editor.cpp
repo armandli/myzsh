@@ -13,8 +13,15 @@ void LineEditor::init() {
 opt<str> LineEditor::read_line(strv prompt, strv rprompt, KeySource source) {
   // TODO(impl): read bytes, accumulating while the selected keymap reports
   // a prefix (KEYTIMEOUT in hundredths of a second), call process_keys,
-  // redraw via layout_line/render_diff after each widget.
+  // redraw via layout_line/render_diff after each widget. Handle each
+  // KeyRead status as described in editor.h; EndOfFile must end the loop.
   todo("LineEditor::read_line");
+}
+
+void LineEditor::resize(int columns, int lines) {
+  // TODO(impl): set $COLUMNS/$LINES, re-run layout_line and redraw the
+  // whole prompt and buffer (not just the last physical line).
+  todo("LineEditor::resize");
 }
 
 bool LineEditor::process_keys(strv keys) {

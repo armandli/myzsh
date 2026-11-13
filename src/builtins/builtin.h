@@ -134,6 +134,7 @@ int bi_times(Shell& shell, const vec<str>& args);
 int bi_enable(Shell& shell, const vec<str>& args);   // enable disable
 int bi_zmodload(Shell& shell, const vec<str>& args);
 int bi_ttyctl(Shell& shell, const vec<str>& args);
+int bi_sched(Shell& shell, const vec<str>& args);
 // --- zle_cmds.cpp
 int bi_bindkey(Shell& shell, const vec<str>& args);
 int bi_zle(Shell& shell, const vec<str>& args);

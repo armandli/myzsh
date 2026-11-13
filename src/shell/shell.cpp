@@ -34,22 +34,60 @@ int Shell::run(const Invocation& invocation) {
 }
 
 int Shell::run_string(strv source, strv name) {
-  // TODO(impl): non-interactive scripts are parsed whole (zsh -c parses the
-  // entire string before running anything); a ShellError aborts the rest
-  // with status 1 (unless interactive, where it aborts the current line).
+  // TODO(impl): for -c and eval only: the entire string is parsed before
+  // running anything (script files, source and stdin go through run_input,
+  // one list at a time; TODO.md §2.3.9); a ShellError aborts the rest with
+  // status 1 (unless interactive, where it aborts the current line).
   todo("Shell::run_string");
+}
+
+int Shell::run_input(InputSource& input, strv name) {
+  // TODO(impl): Lexer over `input` with the alias expander set; loop
+  // Parser::parse_line(): on error report it and return 1 (this is zsh's
+  // loop() in Src/init.c); on nullopt return status; otherwise
+  // input.sync_position(), execute, dispatch_signals(), stop when
+  // flow.exiting or flow.returning (return ends a sourced file). Aliases
+  // take effect from the next list because the lexer consults the alias
+  // table as it reads.
+  todo("Shell::run_input");
 }
 
 int Shell::run_file(strv path, const vec<str>* arguments) {
   // TODO(impl): search $path for names without '/' when not found
   // (PATH_SCRIPT / `.` semantics); SOURCE_TRACE; return statement ends the
-  // file.
+  // file. Open the file as an FdInput and hand it to run_input: it is
+  // parsed and run one list at a time, not read whole.
   todo("Shell::run_file");
 }
 
 int Shell::run_interactive() {
-  // TODO(impl)
+  // TODO(impl): loop { preprompt(); read a line with ZLE (or from stdin
+  // with PS1 printed when not a tty); on EOF honour IGNORE_EOF and
+  // CHECK_JOBS; history-expand (HIST_VERIFY: if changed, offer the
+  // expanded line for editing instead of running it); add to history and
+  // append it to HISTFILE for INC_APPEND_HISTORY/SHARE_HISTORY; run the
+  // preexec hooks; run_input over a StringInput of the line, reading more
+  // with PS2 while the lexer reports incomplete() }.
   todo("Shell::run_interactive");
+}
+
+void Shell::preprompt() {
+  // TODO(impl): see the comment in shell.h. SHARE_HISTORY also reads
+  // entries other shells appended (History::read_new).
+  todo("Shell::preprompt");
+}
+
+void Shell::run_sched_events() {
+  // TODO(impl): pop and run_string() every event with time <= now; $? is
+  // preserved.
+  todo("Shell::run_sched_events");
+}
+
+void Shell::check_mail() {
+  // TODO(impl): MAILCHECK (default 60) seconds since last_mail_check;
+  // MAILPATH entries are "file?message" with $_ set to the file, else
+  // MAIL alone. Compare mtime against atime and the last check.
+  todo("Shell::check_mail");
 }
 
 void Shell::report_error(strv message) {

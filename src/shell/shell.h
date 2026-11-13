@@ -11,6 +11,7 @@
 #include <history/history.h>
 #include <jobs/jobs.h>
 #include <params/param.h>
+#include <parse/input.h>
 #include <shell/alias_table.h>
 #include <shell/cmdline.h>
 #include <shell/named_dirs.h>
@@ -36,6 +37,15 @@ struct ControlFlow {
   }
 };
 
+// One `sched` entry (Src/Modules/sched.c, compiled in).
+struct SchedEvent {
+  // Seconds since the epoch.
+  s::int64_t time = 0;
+  str command;
+  // sched -o: run even while ZLE is active, redrawing the line after.
+  bool run_in_zle = false;
+};
+
 // All interpreter state. zsh keeps this in globals; one object makes it
 // possible to run many independent shells in one test process.
 struct Shell {
@@ -59,17 +69,40 @@ struct Shell {
   // interactive, runs EXIT trap and .zlogout, returns the exit status.
   int run(const Invocation& invocation);
 
-  // Parses and executes source. Parse errors are reported
-  // ("NAME:LINE: parse error near `X'") and give status 1. `name` is used
-  // for error prefixes and $0-in-scripts handling.
+  // -c and eval: parses the whole string, then executes it. A parse error
+  // anywhere means nothing runs ("NAME:LINE: parse error near `X'",
+  // status 1), and aliases defined in the string do not apply to its later
+  // lines. `name` is used for error prefixes and $0-in-scripts handling.
   int run_string(strv source, strv name = "");
+  // Script files, source/., -s and stdin: parses one list at a time and
+  // runs it before reading the next (TODO.md §2.3.9), calling
+  // input.sync_position() before each list so commands that read the same
+  // fd start after it. A parse error is reported and stops the input with
+  // status 1; the lists before it have already run.
+  int run_input(InputSource& input, strv name);
   // `source` / `.`: runs a file in the current shell with optional
-  // positional parameters. Returns 127 and reports if the file is missing.
+  // positional parameters, through run_input over an FdInput. Returns 127
+  // and reports if the file is missing.
   int run_file(strv path, const vec<str>* arguments = nullptr);
-  // Read-eval loop on stdin or the terminal (ZLE if USE_ZLE and a tty):
-  // prompt PS1/RPS1, PS2 for continuation, history expansion and storage,
-  // job notifications, precmd/preexec hooks, IGNORE_EOF, checkjobs on exit.
+  // Read-eval loop on the terminal (ZLE if USE_ZLE and a tty; otherwise
+  // run_input-style reading of stdin with prompts): preprompt(), PS1/RPS1,
+  // PS2 for continuation, history expansion (HIST_VERIFY puts the expanded
+  // line back in the editor instead of running it) and storage
+  // (INC_APPEND_HISTORY / SHARE_HISTORY), preexec, IGNORE_EOF, checkjobs
+  // on exit.
   int run_interactive();
+  // Runs before every interactive prompt, in zsh's order (preprompt() in
+  // Src/utils.c): dispatch_signals(), job notifications, precmd functions,
+  // periodic functions when $PERIOD seconds have passed, due sched events,
+  // then check_mail().
+  void preprompt();
+  // Runs sched events whose time has come (also called while ZLE waits
+  // for a key, so an event fires at the prompt).
+  void run_sched_events();
+  // MAIL / MAILPATH: prints "You have new mail." (or the MAILPATH message)
+  // for files modified since the last check, at most every $MAILCHECK
+  // seconds.
+  void check_mail();
 
   // Writes "NAME:LINE: message" to stderr (NAME:cmd:LINE: for builtins).
   void report_error(strv message);
@@ -122,6 +155,11 @@ struct Shell {
   // fds of the coprocess for read -p / print -p, -1 if none.
   int coproc_in = -1;
   int coproc_out = -1;
+  // Pending sched events, ordered by time.
+  vec<SchedEvent> sched_events;
+  // When the periodic hook and the mail check last ran (epoch seconds).
+  s::int64_t last_periodic = 0;
+  s::int64_t last_mail_check = 0;
 };
 
 }  // namespace myzsh

@@ -4,6 +4,7 @@
 #include <functional>
 
 #include <parse/ast.h>
+#include <parse/input.h>
 #include <parse/token.h>
 #include <util/aliases.h>
 
@@ -19,12 +20,24 @@ namespace myzsh {
 // "for") it returns the whole expression as one String up to the matching
 // "))", followed by DOutPar. In "for ((a;b;c))" the expression String
 // contains the semicolons and the parser splits it.
+//
+// Characters are pulled from an InputSource on demand, never read ahead
+// past the token being scanned (plus one character of lookahead, given
+// back with unget()), so the parser can stop after one list and the rest of
+// the input stays unread (TODO.md §2.3.9). Aliases are expanded by pushing
+// their text back into the source.
 struct Lexer {
   // Returns the replacement text for an alias, or nullopt. The bool says
   // whether the word is in command position (global aliases apply anywhere).
   using AliasExpander = s::function<opt<str>(strv word, bool command_position)>;
 
+  // Reads from `input`, which must outlive the lexer.
+  explicit Lexer(InputSource& input);
+  // Convenience for whole strings (tests, tokenize, history words): owns a
+  // StringInput over a copy of `source`.
   explicit Lexer(strv source);
+  Lexer(const Lexer&) = delete;
+  Lexer& operator=(const Lexer&) = delete;
 
   // Throws nothing; lexical errors come back as TokenType::LexErr with the
   // message in Token::text.
@@ -49,8 +62,12 @@ struct Lexer {
                      bool strip_tabs);
 
   int line() const { return mLine; }
-  bool at_end() const;
-  // True if input ended inside quotes, $( ), ${ }, or a here-doc.
+  // True when no tokens remain. Not const: on a stream this has to read
+  // ahead (skipping blanks and comments) to find out.
+  bool at_end();
+  // True if the input ended inside quotes, $( ), ${ }, a here-doc or an
+  // unfinished construct: interactive input prompts with PS2 and reads
+  // more; elsewhere it is a parse error.
   bool incomplete() const { return mIncomplete; }
 
 protected:
@@ -60,8 +77,13 @@ protected:
   void read_pending_heredocs();
 
 private:
-  str mSource;
-  size_t mPos = 0;
+  // Next character from the source; counts lines.
+  int next_char();
+  void unget(int c);
+
+  // Set only by the strv constructor; mInput then points into it.
+  uptr<StringInput> mOwnedInput;
+  InputSource* mInput = nullptr;
   int mLine = 1;
   bool mCommandPosition = true;
   bool mCondMode = false;

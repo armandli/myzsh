@@ -4,7 +4,21 @@
 
 namespace myzsh {
 
-Lexer::Lexer(strv source) : mSource(source) {}
+Lexer::Lexer(InputSource& input) : mInput(&input) {}
+
+Lexer::Lexer(strv source)
+    : mOwnedInput(s::make_unique<StringInput>(source)),
+      mInput(mOwnedInput.get()) {}
+
+int Lexer::next_char() {
+  // TODO(impl): mInput->next_char(); a '\n' increments mLine.
+  todo("Lexer::next_char");
+}
+
+void Lexer::unget(int c) {
+  // TODO(impl): END_OF_INPUT is not pushed back; '\n' decrements mLine.
+  todo("Lexer::unget");
+}
 
 Token Lexer::next() {
   // TODO(impl): see gettok() in Src/lex.c.
@@ -16,8 +30,11 @@ Token Lexer::next() {
   //  - "()" in command position is InOutPar (function definition);
   //  - words: name=value -> EnvString, name=( -> EnvArray, name+=...;
   //  - in command position, reserved_word() and then alias expansion (aliases
-  //    are expanded by pushing the replacement back into the input; guard
-  //    against recursive expansion of the same alias);
+  //    are expanded with mInput->push_text(replacement); guard against
+  //    recursive expansion of the same alias);
+  //  - never read past the end of the current token plus one character of
+  //    lookahead (given back with unget): after a Newline token nothing of
+  //    the next line has been consumed except pending here-doc bodies;
   //  - "]]" only ends a cond in cond mode.
   todo("Lexer::next");
 }
@@ -36,8 +53,8 @@ void Lexer::queue_heredoc(sptr<ast::HereDoc> target, strv terminator,
   todo("Lexer::queue_heredoc");
 }
 
-bool Lexer::at_end() const {
-  // TODO(impl)
+bool Lexer::at_end() {
+  // TODO(impl): peek().type == EndInput.
   todo("Lexer::at_end");
 }
 

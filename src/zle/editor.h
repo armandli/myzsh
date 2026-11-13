@@ -6,6 +6,7 @@
 #include <util/aliases.h>
 #include <zle/buffer.h>
 #include <zle/keymap.h>
+#include <zle/terminal.h>
 
 namespace myzsh {
 
@@ -18,7 +19,7 @@ using WidgetFunction = s::function<bool(LineEditor&)>;
 // so tests can feed keys without a terminal; the interactive loop uses
 // Terminal::read_byte.
 struct LineEditor {
-  using KeySource = s::function<opt<char>(int timeout_ms)>;
+  using KeySource = s::function<KeyRead(int timeout_ms)>;
 
   explicit LineEditor(Shell& shell) : mShell(shell) {}
 
@@ -37,10 +38,18 @@ struct LineEditor {
   //     send-break vi-cmd-mode vi-insert vi-add-next ... expand-or-complete
   //     complete-word list-choices menu-complete delete-char-or-list
   //     run-help which-command expand-history magic-space
+  //     bracketed-paste (bound to "\e[200~": inserts up to "\e[201~"
+  //     literally, never accepting the line)
   void init();
 
-  // Reads one line. nullopt on EOF (^D on an empty line) or interrupt.
+  // Reads one line. nullopt on EOF (^D on an empty line, or the source
+  // reporting EndOfFile) or interrupt. Interrupted: runs
+  // Shell::dispatch_signals(), which may print job notices (NOTIFY) above
+  // the prompt, then redisplays and keeps reading. TimedOut while idle:
+  // runs due sched events. send-break (^C) discards the line.
   opt<str> read_line(strv prompt, strv rprompt, KeySource source);
+  // SIGWINCH: re-reads the terminal size and redraws prompt and buffer.
+  void resize(int columns, int lines);
 
   // Feeds one complete key sequence as if typed, running the bound widget.
   // Returns false if the editor finished (accept-line, EOF).

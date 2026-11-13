@@ -35,16 +35,32 @@ opt<int> History::search_substring(strv text, int before) const {
 }
 
 bool History::read_file(strv path) {
-  // TODO(impl)
+  // TODO(impl): renumber so the read entries come before any in memory;
+  // set mSavedUpTo past them and record size/mtime.
   todo("History::read_file");
 }
 
-bool History::write_file(strv path, size_t limit, bool append,
-                         const HistoryOptions& options) const
+bool History::read_new(strv path) {
+  // TODO(impl): unchanged size/mtime -> nothing. Otherwise read from
+  // mFileSize on (if the file shrank, another shell rewrote it: skip, as
+  // zsh does, and just record the new size). Lock while reading.
+  todo("History::read_new");
+}
+
+bool History::append_new(strv path, const HistoryOptions& options) {
+  // TODO(impl): lock; open O_APPEND; write entries from mSavedUpTo in the
+  // format chosen by options.extended (multi-line entries with backslash
+  // continuations); update mSavedUpTo and size/mtime.
+  todo("History::append_new");
+}
+
+bool History::rewrite(strv path, size_t limit,
+                      const HistoryOptions& options)
 {
-  // TODO(impl): write to a temp file and rename unless append
-  // (HIST_SAVE_BY_COPY).
-  todo("History::write_file");
+  // TODO(impl): lock; with save_by_copy write "<path>.new" and rename();
+  // otherwise truncate in place. save_no_dups drops older duplicates.
+  // Everything is saved afterwards.
+  todo("History::rewrite");
 }
 
 s::expected<HistoryExpansion, str> History::expand(strv line, char bang,

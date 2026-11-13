@@ -85,7 +85,7 @@ TEST(BuiltinTable, RegisterAllAndLookup) {
         "getopts", "hash", "history", "integer", "jobs", "kill", "let",
         "limit", "local", "logout", "noglob", "popd", "print", "printf",
         "pushd", "pushln", "pwd", "r", "read", "readonly", "rehash",
-        "return", "set", "setopt", "shift", "source", "suspend", "test",
+        "return", "sched", "set", "setopt", "shift", "source", "suspend", "test",
         "times", "trap", "true", "type", "typeset", "ulimit", "umask",
         "unalias", "unfunction", "unhash", "unlimit", "unset", "unsetopt",
         "vared", "wait", "whence", "where", "which", "zle", "zmodload"}) {

@@ -26,6 +26,8 @@ struct HistoryOptions {
   bool extended = false;         // EXTENDED_HISTORY file format
   bool save_no_dups = false;     // HIST_SAVE_NO_DUPS
   bool expire_dups_first = false; // HIST_EXPIRE_DUPS_FIRST
+  bool fcntl_lock = false;       // HIST_FCNTL_LOCK (else a $HISTFILE.LOCK file)
+  bool save_by_copy = true;      // HIST_SAVE_BY_COPY (rewrite via temp + rename)
 };
 
 struct HistoryExpansion {
@@ -39,7 +41,10 @@ struct HistoryExpansion {
 // Command history (Src/hist.c).
 struct History {
   // Returns false if the line was not stored (ignored by options).
+  // HIST_IGNORE_ALL_DUPS removes the older duplicate and stores the new
+  // line.
   bool add(strv line, s::int64_t time, const HistoryOptions& options);
+  // nullopt for numbers outside [first_number(), next_number()).
   opt<s::reference_wrapper<const HistoryEntry>> get(int number) const;
   // Event number the next added line will receive ($HISTCMD + 1).
   int next_number() const { return mNextNumber; }
@@ -55,12 +60,29 @@ struct History {
   opt<int> search_prefix(strv text, int before) const;
   opt<int> search_substring(strv text, int before) const;
 
-  // Reads plain ("cmd") or extended (": 1700000000:0;cmd") format lines;
-  // a trailing backslash continues the entry onto the next line.
+  // History file I/O (TODO.md §2.3.10). The object remembers which
+  // entries are already in the file (saved_up_to()) and how big the file
+  // was when last read or written, so appending never writes an entry
+  // twice — writing everything in append mode would double the file every
+  // session. Every write holds the file lock.
+  //
+  // Reads plain ("cmd") or extended (": 1700000000:0;cmd") format lines; a
+  // trailing backslash continues the entry onto the next line. Entries read
+  // count as saved. Used at startup and by `fc -R`.
   bool read_file(strv path);
-  // Writes at most `limit` (SAVEHIST) entries.
-  bool write_file(strv path, size_t limit, bool append,
-                  const HistoryOptions& options) const;
+  // Reads only what other shells appended since this object last read or
+  // wrote the file (SHARE_HISTORY, before each prompt). The new entries
+  // count as saved.
+  bool read_new(strv path);
+  // Appends the entries not yet saved, then marks them saved:
+  // INC_APPEND_HISTORY after each command, APPEND_HISTORY on exit, `fc -A`.
+  bool append_new(strv path, const HistoryOptions& options);
+  // Replaces the file with the last `limit` (SAVEHIST) entries, through a
+  // temp file and rename() when options.save_by_copy; marks every entry
+  // saved. Used on exit without APPEND_HISTORY, and `fc -W`.
+  bool rewrite(strv path, size_t limit, const HistoryOptions& options);
+  // Event number of the first entry not yet in the file.
+  int saved_up_to() const { return mSavedUpTo; }
 
   // Csh-style history expansion with `bang` (default '!') and `hat` ('^'):
   //   !! !n !-n !str !?str[?] !# !{...}  ^old^new[^]
@@ -74,6 +96,10 @@ private:
   vec<HistoryEntry> mEntries;
   int mNextNumber = 1;
   size_t mLimit = 30;
+  int mSavedUpTo = 1;
+  // The file as last read or written, to find other shells' additions.
+  s::int64_t mFileSize = 0;
+  s::int64_t mFileMtime = 0;
 };
 
 // Splits a command line into shell words the way history word designators

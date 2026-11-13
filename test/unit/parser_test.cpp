@@ -377,5 +377,37 @@ TEST(Parser, ParseLineStopsAtNewline) {
   EXPECT_FALSE(end->has_value());
 }
 
+// Script files are parsed one list at a time: the error in list 3 is
+// reported only after lists 1 and 2 were returned.
+TEST(Parser, ParseLineIsIncremental) {
+  Lexer lexer("echo a\necho b\n)\necho c\n");
+  Parser parser(lexer);
+  auto first = parser.parse_line();
+  ASSERT_TRUE(first);
+  ASSERT_TRUE(first->has_value());
+  auto second = parser.parse_line();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(second->has_value());
+  auto third = parser.parse_line();
+  ASSERT_FALSE(third);
+  EXPECT_EQ(third.error().line, 3);
+}
+
+// parse_line must not consume input past the list it returns.
+TEST(Parser, ParseLineLeavesRestUnread) {
+  StringInput input("echo a\nrest");
+  Lexer lexer(input);
+  Parser parser(lexer);
+  auto first = parser.parse_line();
+  ASSERT_TRUE(first);
+  ASSERT_TRUE(first->has_value());
+  str rest;
+  for (int c = input.next_char(); c != InputSource::END_OF_INPUT;
+       c = input.next_char()) {
+    rest += static_cast<char>(c);
+  }
+  EXPECT_EQ(rest, "rest");
+}
+
 }  // namespace
 }  // namespace myzsh

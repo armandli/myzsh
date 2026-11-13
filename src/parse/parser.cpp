@@ -13,7 +13,11 @@ s::expected<ast::List, ParseError> Parser::parse_program() {
 }
 
 s::expected<opt<ast::List>, ParseError> Parser::parse_line() {
-  // TODO(impl)
+  // TODO(impl): parse_list(true). Do not peek() past the terminating
+  // Newline: a peeked token has already pulled the next line from the
+  // input. A list that is incomplete at EOF (unclosed if/quote) is an
+  // error here; interactive callers check mLexer.incomplete() and read more.
+  // On error, consume tokens up to the next Newline.
   todo("Parser::parse_line");
 }
 

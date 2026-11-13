@@ -46,7 +46,8 @@ void BuiltinTable::register_all() {
   // dispatch on args[0] (e.g. "unsetopt" -> bi_setopt). Prefix entries
   // (builtin command exec noglob nocorrect - ) get BF_PREFIX and a null
   // function. Special builtins: . : break continue eval exec exit export
-  // readonly return set shift source times trap unset.
+  // readonly return set shift source times trap unset. `sched` is
+  // registered too (zsh/sched is compiled in).
   todo("BuiltinTable::register_all");
 }
 
